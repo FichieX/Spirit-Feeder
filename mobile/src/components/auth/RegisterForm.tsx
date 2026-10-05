@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 
-// Soul Feeder dark academia palette
+// Soul Feeder dark academia palette type shi
 const COLORS = {
   background: '#2B211B', // walnut
   header: '#3D2B22', // mahogany
@@ -124,10 +125,20 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
             </Pressable>
           </View>
 
-          <Text style={styles.titleLight}>Let’s</Text>
-          <Text style={styles.titleBold} accessibilityRole="header">
-            {'Create\nYour\nAccount'}
-          </Text>
+          <View style={styles.titleRow}>
+            <View style={styles.titleCol}>
+              <Text style={styles.titleLight}>Let’s</Text>
+              <Text style={styles.titleBold} accessibilityRole="header">
+                {'Create\nYour\nAccount'}
+              </Text>
+            </View>
+            <Image
+              source={require('../../../assets/images/jesus_walking.gif')}
+              style={styles.jesus}
+              contentFit="contain"
+              accessibilityLabel="Jesus walking with a staff"
+            />
+          </View>
         </View>
 
         <View style={styles.body}>
@@ -257,6 +268,17 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     backgroundColor: COLORS.label,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  titleCol: {
+    flex: 1,
+  },
+  jesus: {
+    width: 120,
+    height: 140,
   },
   titleLight: {
     fontFamily: 'Montserrat_300Light',
