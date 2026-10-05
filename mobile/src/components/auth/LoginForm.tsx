@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { login } from '../../api/auth';
 
 // Soul Feeder dark academia palette type shi
 const COLORS = {
@@ -30,6 +32,7 @@ const COLORS = {
   buttonLedge: '#8A6420', // dark gold
   secondary: '#2B211B', // walnut
   secondaryText: '#E8D9B5', // parchment
+  error: '#E06A4F', // ember
 };
 
 type Props = {
@@ -42,9 +45,12 @@ type Props = {
 export default function LoginForm({ active, onCreateAccount, onForgotPassword, onSheetLayout }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  const router = useRouter();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const passwordRef = useRef<TextInput>(null);
 
   // animation on title gng tis sooo PEAK
@@ -72,7 +78,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
           easing: Easing.out(Easing.back(1.6)),
           useNativeDriver: true,
         });
-        Animated.stagger(220, [rise(soulRise), rise(feederRise), rise(bibleRise)]).start();
+      Animated.stagger(220, [rise(soulRise), rise(feederRise), rise(bibleRise)]).start();
     });
   }, [active]);
 
@@ -84,7 +90,6 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
     ],
   });
 
-  
   const lift = useRef(new Animated.Value(0)).current;
   const sheetHeight = useRef(0);
   const activeRef = useRef(active);
@@ -116,10 +121,22 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
     };
   }, []);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     Keyboard.dismiss();
-    // gonns send email + password to I backend
-    console.log('Login pressed for', email);
+    if (!email.trim() || !password) {
+      setError('Enter your email or username and your password.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      const user = await login(email.trim(), password);
+      router.replace({ pathname: '/home', params: { username: user.username } });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -137,7 +154,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
             <View style={styles.dot} />
           </Pressable>
 
-          <View accessible accessibilityRole="header" accessibilityLabel="Soul Feeder">
+          <View accessible accessibilityRole="header" accessibilityLabel="Spirit Feeder">
             <Animated.Text style={[styles.title, riseStyle(soulRise)]}>SPIRIT</Animated.Text>
             <Animated.Text style={[styles.title, riseStyle(feederRise)]}>FEEDER</Animated.Text>
           </View>
@@ -153,8 +170,11 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
             <TextInput
               style={styles.input}
               value={email}
-              onChangeText={setEmail}
-              placeholder="Email or Phone"
+              onChangeText={(t) => {
+                setEmail(t);
+                if (error) setError('');
+              }}
+              placeholder="Email or Username"
               placeholderTextColor={COLORS.placeholder}
               selectionColor={COLORS.title}
               autoCapitalize="none"
@@ -163,7 +183,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
               textContentType="username"
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
-              accessibilityLabel="Email or phone"
+              accessibilityLabel="Email or username"
             />
           </View>
 
@@ -173,7 +193,10 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
               ref={passwordRef}
               style={styles.input}
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(t) => {
+                setPassword(t);
+                if (error) setError('');
+              }}
               placeholder="Password"
               placeholderTextColor={COLORS.placeholder}
               selectionColor={COLORS.title}
@@ -203,12 +226,19 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
             <Text style={styles.forgot}>Forgot Password?</Text>
           </Pressable>
 
+          {error ? (
+            <Text style={styles.error} accessibilityLiveRegion="polite">
+              {error}
+            </Text>
+          ) : null}
+
           <Pressable
             style={({ pressed }) => [styles.button, styles.primary, pressed && styles.primaryPressed]}
             onPress={handleLogin}
+            disabled={loading}
             accessibilityRole="button"
           >
-            <Text style={[styles.buttonText, styles.loginText]}>Login</Text>
+            <Text style={[styles.buttonText, styles.loginText]}>{loading ? 'Opening...' : 'Login'}</Text>
           </Pressable>
 
           <Text style={styles.or}>or</Text>
@@ -259,10 +289,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
     alignItems: 'center',
   },
-  bibleImage: {
-    width: 144,
-    height: 132,
-  },
   form: {
     paddingHorizontal: 52,
     gap: 16,
@@ -304,6 +330,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_400Regular',
     fontSize: 12,
     color: COLORS.text,
+  },
+  error: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 13,
+    color: COLORS.error,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   button: {
     height: 56,

@@ -14,8 +14,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { register } from '../../api/auth';
 
-// Soul Feeder dark academia palette type shi
+// Soul Feeder dark academia palette
 const COLORS = {
   background: '#2B211B', // walnut
   header: '#3D2B22', // mahogany
@@ -62,15 +63,18 @@ type Props = {
 export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
   const insets = useSafeAreaInsets();
 
-  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [birthday, setBirthday] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
   const emailRef = useRef<TextInput>(null);
+  const birthdayRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
 
@@ -87,16 +91,39 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
     onBack();
   };
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     Keyboard.dismiss();
-    if (!name.trim()) return setError('Enter your full name.');
+    if (!/^[A-Za-z0-9_]{3,20}$/.test(username.trim()))
+      return setError('Use 3 to 20 letters, numbers, or underscores for your username.');
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Enter a valid email address.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday.trim()))
+      return setError('Enter your birthday as YYYY-MM-DD, for example 2008-04-21.');
     if (password.length < 8) return setError('Use at least 8 characters for your password.');
     if (password !== confirm) return setError("Passwords don't match. Retype them to continue.");
     if (!agreed) return setError('Agree to the Terms & Privacy to continue.');
     setError('');
-    // so this gonnna send name, email and password to the FastAPI backend
-    Alert.alert('Looks good', 'This will create the account once the backend is connected.');
+    setLoading(true);
+    try {
+      await register({
+        username: username.trim(),
+        email: email.trim(),
+        password,
+        birthday: birthday.trim(),
+      });
+      setUsername('');
+      setEmail('');
+      setBirthday('');
+      setPassword('');
+      setConfirm('');
+      setAgreed(false);
+      Alert.alert('Your pet is ready', 'Log in with your new account to meet them.', [
+        { text: 'Log in', onPress: goBack },
+      ]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -145,12 +172,13 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
           <View style={styles.form}>
             <Field
               icon="person"
-              placeholder="Full Name"
-              value={name}
-              onChangeText={update(setName)}
-              autoCapitalize="words"
-              autoComplete="name"
-              textContentType="name"
+              placeholder="Username"
+              value={username}
+              onChangeText={update(setUsername)}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              textContentType="username"
               returnKeyType="next"
               onSubmitEditing={() => emailRef.current?.focus()}
             />
@@ -165,6 +193,17 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
               autoCorrect={false}
               autoComplete="email"
               textContentType="emailAddress"
+              returnKeyType="next"
+              onSubmitEditing={() => birthdayRef.current?.focus()}
+            />
+            <Field
+              inputRef={birthdayRef}
+              icon="calendar-outline"
+              placeholder="Birthday (YYYY-MM-DD)"
+              value={birthday}
+              onChangeText={update(setBirthday)}
+              keyboardType="numbers-and-punctuation"
+              maxLength={10}
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
             />
@@ -221,9 +260,10 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
           <Pressable
             style={({ pressed }) => [styles.button, pressed && styles.pressed]}
             onPress={handleSignUp}
+            disabled={loading}
             accessibilityRole="button"
           >
-            <Text style={styles.buttonText}>Sign Up</Text>
+            <Text style={styles.buttonText}>{loading ? 'Creating...' : 'Sign Up'}</Text>
           </Pressable>
 
           <View style={styles.footer}>
@@ -295,10 +335,10 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: 52,
-    paddingTop: 54,
+    paddingTop: 40,
   },
   form: {
-    gap: 17,
+    gap: 14,
   },
   inputRow: {
     flexDirection: 'row',
@@ -323,7 +363,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 10,
-    marginTop: 52,
+    marginTop: 32,
     marginBottom: 22,
     marginLeft: 6,
   },
@@ -380,7 +420,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 48,
+    marginTop: 40,
     marginLeft: 4,
   },
   footerText: {

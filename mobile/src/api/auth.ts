@@ -1,23 +1,37 @@
-// Change this to your computer's local IP while testing on a phone,
-// e.g. 'http://192.168.1.23:8000'. "localhost" won't work from a phone.
-export const API_URL = 'http://192.168.1.23:8000';
+export const API_URL = 'http://192.168.0.104:8000';
 
 export type User = { id: number; username: string; email: string; birthday: string };
 
-export async function login(identifier: string, password: string): Promise<User> {
+async function post(path: string, body: object) {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/api/login`, {
+    res = await fetch(`${API_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier, password }),
+      body: JSON.stringify(body),
     });
   } catch {
-    throw new Error("Can't reach the server. Check your connection.");
+    throw new Error("Can't reach the server. Check your connection and try again.");
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data.detail === 'string' ? data.detail : 'Login failed. Try again.');
+    const detail = typeof data.detail === 'string' ? data.detail : null;
+    throw new Error(detail ?? 'Something went wrong. Try again.');
   }
+  return data;
+}
+
+export async function login(identifier: string, password: string): Promise<User> {
+  const data = await post('/api/login', { identifier, password });
+  return data.user;
+}
+
+export async function register(input: {
+  username: string;
+  email: string;
+  password: string;
+  birthday: string;
+}): Promise<User> {
+  const data = await post('/api/register', input);
   return data.user;
 }
