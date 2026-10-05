@@ -14,24 +14,29 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+// Soul Feeder dark academia palette
 const COLORS = {
-  yellow: '#F6BC3F',
-  cream: '#FDE8CF',
-  border: '#E5472B',
-  placeholder: '#E6765A',
-  icon: '#EC9A80',
-  inputText: '#C2461F',
-  label: '#D2553B',
-  strong: '#C8402A',
-  dark: '#2E2D29',
-  white: '#FFFFFF',
+  background: '#2B211B', // walnut
+  header: '#3D2B22', // mahogany
+  ink: '#1B1612', // outlines and input fill
+  border: '#5A3E2B', // oak
+  placeholder: '#9C6B43', // saddle
+  icon: '#9C6B43', // saddle
+  inputText: '#E8D9B5', // parchment
+  label: '#C9B48A', // vellum
+  strong: '#D9A441', // candle gold
+  error: '#E06A4F', // ember
+  title: '#D9A441', // candle gold
+  titleLight: '#C9B48A', // vellum
+  button: '#D9A441', // candle gold
+  buttonLedge: '#8A6420', // dark gold
+  close: '#E8D9B5', // parchment
 };
 
 type FieldProps = ComponentProps<typeof TextInput> & {
   icon: ComponentProps<typeof Ionicons>['name'];
   inputRef?: Ref<TextInput>;
 };
-
 
 function Field({ icon, inputRef, ...props }: FieldProps) {
   return (
@@ -41,7 +46,7 @@ function Field({ icon, inputRef, ...props }: FieldProps) {
         ref={inputRef}
         style={styles.input}
         placeholderTextColor={COLORS.placeholder}
-        selectionColor={COLORS.border}
+        selectionColor={COLORS.strong}
         {...props}
       />
     </View>
@@ -115,7 +120,7 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
               <View style={styles.dot} />
             </Pressable>
             <Pressable onPress={goBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
-              <Ionicons name="close-outline" size={34} color={COLORS.white} />
+              <Ionicons name="close-outline" size={34} color={COLORS.close} />
             </Pressable>
           </View>
 
@@ -150,8 +155,6 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
               autoComplete="email"
               textContentType="emailAddress"
               returnKeyType="next"
-
-              
               onSubmitEditing={() => passwordRef.current?.focus()}
             />
             <Field
@@ -191,7 +194,7 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
             accessibilityState={{ checked: agreed }}
           >
             <View style={[styles.checkbox, agreed && styles.checkboxOn]}>
-              {agreed && <Ionicons name="checkmark" size={12} color={COLORS.white} />}
+              {agreed && <Ionicons name="checkmark" size={12} color={COLORS.ink} />}
             </View>
             <Text style={styles.agreeText}>
               I agree to the <Text style={styles.agreeLink}>Terms & Privacy</Text>
@@ -227,15 +230,15 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.cream,
+    backgroundColor: COLORS.background,
   },
   content: {
     flexGrow: 1,
   },
   header: {
-    backgroundColor: COLORS.yellow,
-    borderBottomLeftRadius: 44,
-    borderBottomRightRadius: 44,
+    backgroundColor: COLORS.header,
+    borderBottomWidth: 3,
+    borderBottomColor: COLORS.ink,
     paddingHorizontal: 34,
     paddingBottom: 36,
   },
@@ -253,21 +256,20 @@ const styles = StyleSheet.create({
   dot: {
     width: 7,
     height: 7,
-    borderRadius: 3.5,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.label,
   },
   titleLight: {
     fontFamily: 'Montserrat_300Light',
     fontSize: 44,
     lineHeight: 48,
-    color: COLORS.white,
+    color: COLORS.titleLight,
     marginTop: 8,
   },
   titleBold: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 44,
     lineHeight: 46,
-    color: COLORS.white,
+    color: COLORS.title,
   },
   body: {
     paddingHorizontal: 52,
@@ -279,12 +281,12 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 58,
-    borderRadius: 29,
+    height: 56,
+    backgroundColor: COLORS.ink,
     borderWidth: 2,
     borderColor: COLORS.border,
-    paddingLeft: 36,
-    paddingRight: 20,
+    paddingLeft: 18,
+    paddingRight: 16,
   },
   input: {
     flex: 1,
@@ -306,15 +308,15 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 16,
     height: 16,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: COLORS.strong,
+    borderWidth: 2,
+    borderColor: COLORS.label,
+    backgroundColor: COLORS.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxOn: {
-    backgroundColor: COLORS.border,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.strong,
+    borderColor: COLORS.strong,
   },
   agreeText: {
     fontFamily: 'Montserrat_400Regular',
@@ -328,28 +330,30 @@ const styles = StyleSheet.create({
   error: {
     fontFamily: 'Montserrat_400Regular',
     fontSize: 12.5,
-    color: COLORS.strong,
+    color: COLORS.error,
     textAlign: 'center',
     marginTop: -8,
     marginBottom: 14,
   },
   button: {
     height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.yellow,
-    borderWidth: 1.5,
-    borderColor: COLORS.white,
+    backgroundColor: COLORS.button,
+    borderWidth: 2,
+    borderColor: COLORS.ink,
+    borderBottomWidth: 6,
+    borderBottomColor: COLORS.buttonLedge,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.ink,
+    transform: [{ translateY: 4 }],
   },
   buttonText: {
-    fontFamily: 'Montserrat_400Regular',
+    fontFamily: 'Montserrat_500Medium',
     fontSize: 17,
-    color: COLORS.white,
+    color: COLORS.ink,
   },
   footer: {
     flexDirection: 'row',
@@ -365,6 +369,6 @@ const styles = StyleSheet.create({
   footerLink: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 12,
-    color: COLORS.dark,
+    color: COLORS.strong,
   },
 });

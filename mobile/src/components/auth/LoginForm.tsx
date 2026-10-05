@@ -1,3 +1,4 @@
+import BibleButton from './BibleButton';
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -15,14 +16,20 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+// Soul Feeder dark academia palette type shi
 const COLORS = {
-  yellow: '#F6BC3F',
-  cream: '#FDE8CF',
-  inputBorder: '#E5472B',
-  placeholder: '#EE7A3B',
-  inputText: '#C2461F',
-  dark: '#3B3A33',
-  white: '#FFFFFF',
+  background: '#2B211B', // walnut
+  sheet: '#3D2B22', // mahogany
+  ink: '#1B1612', // outlines and input fill
+  inputBorder: '#5A3E2B', // oak
+  placeholder: '#9C6B43', // saddle
+  inputText: '#E8D9B5', // parchment
+  title: '#D9A441', // candle gold
+  text: '#C9B48A', // vellum
+  button: '#D9A441', // candle gold
+  buttonLedge: '#8A6420', // dark gold
+  secondary: '#2B211B', // walnut
+  secondaryText: '#E8D9B5', // parchment
 };
 
 type Props = {
@@ -40,18 +47,21 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
   const [password, setPassword] = useState('');
   const passwordRef = useRef<TextInput>(null);
 
-  // animation on title gng
+  // animation on title gng tis sooo PEAK
   const soulRise = useRef(new Animated.Value(0)).current;
   const feederRise = useRef(new Animated.Value(0)).current;
+  const bibleRise = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!active) return;
     soulRise.setValue(0);
     feederRise.setValue(0);
+    bibleRise.setValue(0);
     AccessibilityInfo.isReduceMotionEnabled().then((reduceMotion) => {
       if (reduceMotion) {
         soulRise.setValue(1);
         feederRise.setValue(1);
+        bibleRise.setValue(1);
         return;
       }
       const rise = (value: Animated.Value) =>
@@ -62,7 +72,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
           easing: Easing.out(Easing.back(1.6)),
           useNativeDriver: true,
         });
-      Animated.stagger(220, [rise(soulRise), rise(feederRise)]).start();
+        Animated.stagger(220, [rise(soulRise), rise(feederRise), rise(bibleRise)]).start();
     });
   }, [active]);
 
@@ -74,7 +84,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
     ],
   });
 
-  // Keyboard: slide up just enough that the password field stays visible
+  
   const lift = useRef(new Animated.Value(0)).current;
   const sheetHeight = useRef(0);
   const activeRef = useRef(active);
@@ -128,9 +138,13 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
           </Pressable>
 
           <View accessible accessibilityRole="header" accessibilityLabel="Soul Feeder">
-            <Animated.Text style={[styles.title, riseStyle(soulRise)]}>SOUL</Animated.Text>
+            <Animated.Text style={[styles.title, riseStyle(soulRise)]}>SPIRIT</Animated.Text>
             <Animated.Text style={[styles.title, riseStyle(feederRise)]}>FEEDER</Animated.Text>
           </View>
+
+          <Animated.View style={[styles.bible, riseStyle(bibleRise)]}>
+            <BibleButton />
+          </Animated.View>
         </View>
 
         <View style={styles.form}>
@@ -142,7 +156,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
               onChangeText={setEmail}
               placeholder="Email or Phone"
               placeholderTextColor={COLORS.placeholder}
-              selectionColor={COLORS.inputBorder}
+              selectionColor={COLORS.title}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="username"
@@ -162,7 +176,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
               onChangeText={setPassword}
               placeholder="Password"
               placeholderTextColor={COLORS.placeholder}
-              selectionColor={COLORS.inputBorder}
+              selectionColor={COLORS.title}
               secureTextEntry
               autoComplete="password"
               textContentType="password"
@@ -190,7 +204,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
           </Pressable>
 
           <Pressable
-            style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.button, styles.primary, pressed && styles.primaryPressed]}
             onPress={handleLogin}
             accessibilityRole="button"
           >
@@ -200,7 +214,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
           <Text style={styles.or}>or</Text>
 
           <Pressable
-            style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.secondaryPressed]}
             onPress={onCreateAccount}
             accessibilityRole="button"
           >
@@ -215,7 +229,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.yellow,
+    backgroundColor: COLORS.background,
   },
   top: {
     flex: 1,
@@ -231,16 +245,23 @@ const styles = StyleSheet.create({
   dot: {
     width: 7,
     height: 7,
-    borderRadius: 3.5,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.text,
   },
   title: {
     fontFamily: 'Silkscreen_700Bold',
     fontSize: 34,
     lineHeight: 54,
     letterSpacing: 1,
-    color: COLORS.white,
+    color: COLORS.title,
     textAlign: 'center',
+  },
+  bible: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  bibleImage: {
+    width: 144,
+    height: 132,
   },
   form: {
     paddingHorizontal: 52,
@@ -250,12 +271,12 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 58,
-    borderRadius: 29,
+    height: 56,
+    backgroundColor: COLORS.ink,
     borderWidth: 2,
     borderColor: COLORS.inputBorder,
-    paddingLeft: 36,
-    paddingRight: 20,
+    paddingLeft: 18,
+    paddingRight: 16,
   },
   input: {
     flex: 1,
@@ -266,9 +287,9 @@ const styles = StyleSheet.create({
     color: COLORS.inputText,
   },
   sheet: {
-    backgroundColor: COLORS.cream,
-    borderTopLeftRadius: 44,
-    borderTopRightRadius: 44,
+    backgroundColor: COLORS.sheet,
+    borderTopWidth: 3,
+    borderTopColor: COLORS.ink,
     paddingTop: 20,
     paddingHorizontal: 52,
   },
@@ -282,37 +303,47 @@ const styles = StyleSheet.create({
   forgot: {
     fontFamily: 'Montserrat_400Regular',
     fontSize: 12,
-    color: COLORS.dark,
+    color: COLORS.text,
   },
   button: {
     height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.yellow,
-    borderWidth: 1.5,
-    borderColor: COLORS.white,
+    borderWidth: 2,
+    borderColor: COLORS.ink,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0px 14px 14px -8px rgba(60, 50, 30, 0.35)',
   },
-  pressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
+  primary: {
+    backgroundColor: COLORS.button,
+    borderBottomWidth: 6,
+    borderBottomColor: COLORS.buttonLedge,
+  },
+  primaryPressed: {
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.ink,
+    transform: [{ translateY: 4 }],
+  },
+  secondary: {
+    backgroundColor: COLORS.secondary,
+    borderColor: COLORS.inputBorder,
+  },
+  secondaryPressed: {
+    backgroundColor: COLORS.inputBorder,
   },
   buttonText: {
     fontSize: 17,
   },
   loginText: {
-    fontFamily: 'Montserrat_400Regular',
-    color: COLORS.white,
+    fontFamily: 'Montserrat_500Medium',
+    color: COLORS.ink,
   },
   createText: {
     fontFamily: 'Montserrat_500Medium',
-    color: COLORS.dark,
+    color: COLORS.secondaryText,
   },
   or: {
     fontFamily: 'Montserrat_400Regular',
     fontSize: 13,
-    color: COLORS.dark,
+    color: COLORS.text,
     textAlign: 'center',
     marginVertical: 14,
   },

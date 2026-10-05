@@ -20,8 +20,9 @@ import {
 import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
 
-const YELLOW = '#F6BC3F';
-const CREAM = '#FDE8CF';
+const TOP = '#2B211B'; //
+const BOTTOM = '#3D2B22'; //
+const INK = '#1B1612'; //OUTLINE
 
 type Mode = 'login' | 'toRegister' | 'register' | 'toLogin';
 
@@ -41,7 +42,7 @@ export default function AuthScreen() {
 
   const loginOpacity = useRef(new Animated.Value(1)).current;
   const registerOpacity = useRef(new Animated.Value(0)).current;
-  const panel = useRef(new Animated.Value(0)).current; // 0 = login colors, 1 = register colors
+  const panel = useRef(new Animated.Value(0)).current; 
   const reduceMotion = useRef(false);
 
   useEffect(() => {
@@ -114,7 +115,7 @@ export default function AuthScreen() {
     return () => sub.remove();
   }, [mode]);
 
-  if (!fontsLoaded) return <View style={[styles.screen, { backgroundColor: YELLOW }]} />;
+  if (!fontsLoaded) return <View style={[styles.screen, { backgroundColor: TOP }]} />;
 
   return (
     <View style={styles.screen}>
@@ -148,24 +149,24 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: CREAM,
+    backgroundColor: BOTTOM,
   },
   panel: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: YELLOW,
-    borderBottomLeftRadius: 44,
-    borderBottomRightRadius: 44,
+    backgroundColor: TOP,
+    borderBottomWidth: 3,
+    borderBottomColor: INK,
   },
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: CREAM,
-    borderTopLeftRadius: 44,
-    borderTopRightRadius: 44,
+    backgroundColor: BOTTOM,
+    borderTopWidth: 3,
+    borderTopColor: INK,
   },
 });
