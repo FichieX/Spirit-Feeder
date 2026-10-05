@@ -48,10 +48,9 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     birthday = Column(String(20), nullable=True)
-    points = Column(Integer, default=0, index=True)
+    xp = Column(Integer, default=0, index=True)  # Game XP
     animal_id = Column(Integer, ForeignKey("animals.animal_id"), nullable=True)
     animal_level = Column(Integer, default=1)  # 1 to 100
-    growth_progress = Column(Integer, default=0)  # Points within current level (0-30)
 
     animal = relationship("Animal")
 
@@ -80,7 +79,7 @@ class UserVerse(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     verse_id = Column(Integer, ForeignKey("verses.verse_id"), nullable=False)
-    type = Column(String(20), nullable=False)  # 'feed' or 'memorized'
+    type = Column(String(20), nullable=False)
 
 
 class QuizQuestion(Base):
@@ -101,7 +100,7 @@ class QuizResult(Base):
     question_id = Column(Integer, ForeignKey("quiz_questions.question_id"), nullable=False)
     user_answer = Column(String(255), nullable=False)
     correct = Column(Boolean, nullable=False)
-    points_changed = Column(Integer, nullable=False)
+    xp_changed = Column(Integer, nullable=False)
 
 
 # --- DB Initialization & Seeding ---
@@ -110,7 +109,6 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        # Seed Pet Species
         if not db.query(Animal).first():
             animals = [
                 Animal(species="Lamb", baby_name="Baby Lamb", young_name="Young Ram", adult_name="Majestic Ram"),
@@ -119,27 +117,21 @@ def init_db():
                 Animal(species="Donkey", baby_name="Little Foal", young_name="Young Donkey", adult_name="Royal Donkey"),
                 Animal(species="Camel", baby_name="Baby Calf", young_name="Desert Camel", adult_name="Caravan Camel"),
                 Animal(species="Lion", baby_name="Cub", young_name="Young Lion", adult_name="Lion of Judah"),
-                Animal(species="Fish", baby_name="Tiny Fry", young_name="Silver Fish", adult_name="Miracle Fish"),
+                Animal(species="Fish", baby_name="Tiny Cat-Fish", young_name="Silver Cat-Fish", adult_name="Miracle Cat-Fish"),
             ]
             db.add_all(animals)
 
-        # Seed Sample Verses
         if not db.query(Verse).first():
             sample_verses = [
                 Verse(reference="Genesis 1:1", content="In the beginning God created the heavens and the earth."),
                 Verse(reference="Psalm 23:1", content="The Lord is my shepherd; I shall not want."),
                 Verse(reference="John 3:16", content="For God so loved the world that he gave his one and only Son."),
-                Verse(reference="Proverbs 3:5", content="Trust in the Lord with all your heart and lean not on your own understanding."),
-                Verse(reference="Philippians 4:13", content="I can do all things through Christ who strengthens me."),
             ]
             db.add_all(sample_verses)
 
-        # Seed Serpent Quiz Questions
         if not db.query(QuizQuestion).first():
             sample_quizzes = [
-                QuizQuestion(question_text="Is it good to help your neighbor in need?", correct_answer="Yes", wrong_answer_1="No", wrong_answer_2="Only if they pay you"),
-                QuizQuestion(question_text="Should you hold grudges or forgive those who wrong you?", correct_answer="Forgive them", wrong_answer_1="Hold a grudge", wrong_answer_2="Get revenge"),
-                QuizQuestion(question_text="What did Jesus say is the greatest commandment?", correct_answer="Love God with all your heart", wrong_answer_1="Gain wealth", wrong_answer_2="Judge others"),
+                QuizQuestion(question_text="Is it good to help your neighbor in need?", correct_answer="Yes", wrong_answer_1="No", wrong_answer_2="Only if paid"),
             ]
             db.add_all(sample_quizzes)
 
@@ -161,7 +153,7 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    identifier: str  # Accepts Username OR Email
+    identifier: str
     password: str
 
 
@@ -170,34 +162,34 @@ class SelectPetRequest(BaseModel):
     animal_id: int
 
 
-class MemorizeSubmitRequest(BaseModel):
-    user_id: int
-    verse_id: int
-    attempt_text: str
-
-
 class QuizSubmitRequest(BaseModel):
     user_id: int
     question_id: int
     answer: str
 
 
-# --- Game Helpers ---
+# --- XP & Level Progression Engine ---
 
-def add_progress(user: User, points_to_add: int):
-    user.points += points_to_add
-    user.growth_progress += points_to_add
-
-    while user.growth_progress >= 30 and user.animal_level < 100:
-        user.growth_progress -= 30
-        user.animal_level += 1
-
-    if user.animal_level >= 100:
-        user.animal_level = 100
-        user.growth_progress = 30
+def get_required_xp_for_level(level: int) -> int:
+    """Medium Fast growth rate: Total XP = level^3."""
+    if level >= 100:
+        return 1_000_000
+    return level ** 3
 
 
-def calculate_evolution_stage(level: int, animal: Optional[Animal]):
+def update_user_level(user: User):
+    """Calculates user level based on total XP and formula (Level = floor(cbrt(XP)))."""
+    current_xp = max(0, user.xp)
+    
+    # Calculate level based on cubic curve
+    calculated_level = int(current_xp ** (1/3))
+    
+    # Clamp level between 1 and 100
+    user.animal_level = max(1, min(100, calculated_level))
+
+
+def get_evolution_info(level: int, animal: Optional[Animal]):
+    """Determines active stage and animal name based on current level."""
     if not animal:
         return None
     if level < 30:
@@ -206,6 +198,34 @@ def calculate_evolution_stage(level: int, animal: Optional[Animal]):
         return {"stage": "Young", "name": animal.young_name}
     else:
         return {"stage": "Adult", "name": animal.adult_name}
+
+
+def get_feed_xp_reward(level: int) -> int:
+    """Returns feed XP based on level tier."""
+    if level < 30:
+        return random.randint(15, 50)
+    elif level < 60:
+        return 700
+    else:
+        return 1800
+
+
+def get_quiz_xp_reward(level: int, correct: bool) -> int:
+    """Returns quiz XP gain/loss based on level tier."""
+    if correct:
+        if level < 30:
+            return random.randint(200, 600)
+        elif level < 60:
+            return random.randint(1500, 3500)
+        else:
+            return 5000
+    else:
+        if level < 30:
+            return -50
+        elif level < 60:
+            return -500
+        else:
+            return -1500
 
 
 # --- API Routes ---
@@ -225,6 +245,7 @@ def register(data: RegisterRequest):
             email=data.email,
             password_hash=hashed_pwd,
             birthday=str(data.birthday),
+            xp=1,  # Starts at Level 1
         )
         db.add(user)
         db.commit()
@@ -246,9 +267,13 @@ def login(credentials: LoginRequest):
 
     if not user or not pwd_context.verify(credentials.password, user.password_hash):
         db.close()
-        raise HTTPException(status_code=401, detail="Invalid username/email or password.")
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
 
-    evolution = calculate_evolution_stage(user.animal_level, user.animal)
+    update_user_level(user)
+    db.commit()
+
+    evolution = get_evolution_info(user.animal_level, user.animal)
+    next_level_xp = get_required_xp_for_level(user.animal_level + 1)
     db.close()
 
     return {
@@ -258,9 +283,9 @@ def login(credentials: LoginRequest):
             "username": user.username,
             "email": user.email,
             "birthday": user.birthday,
-            "points": user.points,
+            "xp": user.xp,
             "animal_level": user.animal_level,
-            "growth_progress": user.growth_progress,
+            "next_level_xp": next_level_xp,
             "pet": evolution,
         },
     }
@@ -295,19 +320,29 @@ def feed_pet_with_verse(user_id: int):
         db.close()
         raise HTTPException(status_code=404, detail="No verses available.")
 
+    # Calculate XP earned based on current level tier
+    xp_earned = get_feed_xp_reward(user.animal_level)
+    user.xp += xp_earned
+    
+    # Update Level based on new total XP
+    old_level = user.animal_level
+    update_user_level(user)
+    
     db.add(UserVerse(user_id=user.id, verse_id=verse.verse_id, type="feed"))
-    add_progress(user, 10)
     db.commit()
 
-    evolution = calculate_evolution_stage(user.animal_level, user.animal)
+    evolution = get_evolution_info(user.animal_level, user.animal)
+    next_level_xp = get_required_xp_for_level(user.animal_level + 1)
     db.close()
 
     return {
         "message": "Fed pet with verse!",
         "verse": {"reference": verse.reference, "text": verse.content},
-        "points_earned": 10,
+        "xp_earned": xp_earned,
+        "total_xp": user.xp,
         "current_level": user.animal_level,
-        "growth_progress": f"{user.growth_progress}/30",
+        "next_level_xp": next_level_xp,
+        "leveled_up": user.animal_level > old_level,
         "pet": evolution,
     }
 
@@ -323,43 +358,41 @@ def handle_serpent_quiz(data: QuizSubmitRequest):
         raise HTTPException(status_code=404, detail="User or Question not found.")
 
     is_correct = data.answer.strip().lower() == question.correct_answer.strip().lower()
-    points_delta = 15 if is_correct else -15
+    xp_delta = get_quiz_xp_reward(user.animal_level, is_correct)
 
-    if is_correct:
-        add_progress(user, 15)
-    else:
-        user.points = max(0, user.points - 15)
-        user.growth_progress -= 15
-        if user.growth_progress < 0:
-            if user.animal_level > 1:
-                user.animal_level -= 1
-                user.growth_progress += 30
-            else:
-                user.growth_progress = 0
+    user.xp = max(0, user.xp + xp_delta)
+    old_level = user.animal_level
+    update_user_level(user)
 
-    db.add(QuizResult(user_id=user.id, question_id=question.question_id, user_answer=data.answer, correct=is_correct, points_changed=points_delta))
+    db.add(QuizResult(user_id=user.id, question_id=question.question_id, user_answer=data.answer, correct=is_correct, xp_changed=xp_delta))
     db.commit()
+
+    evolution = get_evolution_info(user.animal_level, user.animal)
     db.close()
 
     return {
         "correct": is_correct,
-        "points_changed": points_delta,
-        "message": "Good defeated evil! +15 points." if is_correct else "The serpent tricked you! -15 points.",
+        "xp_changed": xp_delta,
+        "total_xp": user.xp,
+        "current_level": user.animal_level,
+        "leveled_up": user.animal_level > old_level,
+        "pet": evolution,
+        "message": f"Correct! +{xp_delta} XP." if is_correct else f"Incorrect! {xp_delta} XP.",
     }
 
 
 @app.get("/api/leaderboard")
 def get_leaderboard(limit: int = 10):
     db = SessionLocal()
-    users = db.query(User).order_by(User.points.desc()).limit(limit).all()
+    users = db.query(User).order_by(User.xp.desc()).limit(limit).all()
 
     leaderboard = [
         {
             "rank": rank,
             "username": u.username,
-            "points": u.points,
+            "total_xp": u.xp,
             "level": u.animal_level,
-            "pet_name": calculate_evolution_stage(u.animal_level, u.animal)["name"] if u.animal else "No Pet",
+            "pet_name": get_evolution_info(u.animal_level, u.animal)["name"] if u.animal else "No Pet",
         }
         for rank, u in enumerate(users, start=1)
     ]
