@@ -14,9 +14,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { register } from '../../api/auth';
 
-// Soul Feeder dark academia palette
+// Soul Feeder dark academia palette type shi
 const COLORS = {
   background: '#2B211B', // walnut
   header: '#3D2B22', // mahogany
@@ -34,6 +35,19 @@ const COLORS = {
   buttonLedge: '#8A6420', // dark gold
   close: '#E8D9B5', // parchment
 };
+
+const DEFAULT_BIRTHDAY = new Date(2008, 0, 1);
+
+// 
+function toApiDate(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// April 21, 2008 style, for showing in the field
+function toDisplayDate(date: Date) {
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
 
 type FieldProps = ComponentProps<typeof TextInput> & {
   icon: ComponentProps<typeof Ionicons>['name'];
@@ -65,7 +79,8 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
 
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [birthday, setBirthday] = useState('');
+  const [birthday, setBirthday] = useState<Date | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [agreed, setAgreed] = useState(false);
@@ -74,7 +89,6 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
 
   const scrollRef = useRef<ScrollView>(null);
   const emailRef = useRef<TextInput>(null);
-  const birthdayRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
 
@@ -84,20 +98,27 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
     if (error) setError('');
   };
 
+  const openPicker = () => {
+    Keyboard.dismiss();
+    if (error) setError('');
+    setShowPicker(true);
+  };
+
   const goBack = () => {
     Keyboard.dismiss();
     setError('');
+    setShowPicker(false);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
     onBack();
   };
 
   const handleSignUp = async () => {
     Keyboard.dismiss();
+    setShowPicker(false);
     if (!/^[A-Za-z0-9_]{3,20}$/.test(username.trim()))
       return setError('Use 3 to 20 letters, numbers, or underscores for your username.');
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Enter a valid email address.');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday.trim()))
-      return setError('Enter your birthday as YYYY-MM-DD, for example 2008-04-21.');
+    if (!birthday) return setError('Choose your birthday.');
     if (password.length < 8) return setError('Use at least 8 characters for your password.');
     if (password !== confirm) return setError("Passwords don't match. Retype them to continue.");
     if (!agreed) return setError('Agree to the Terms & Privacy to continue.');
@@ -108,11 +129,11 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
         username: username.trim(),
         email: email.trim(),
         password,
-        birthday: birthday.trim(),
+        birthday: toApiDate(birthday),
       });
       setUsername('');
       setEmail('');
-      setBirthday('');
+      setBirthday(null);
       setPassword('');
       setConfirm('');
       setAgreed(false);
@@ -194,19 +215,53 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
               autoComplete="email"
               textContentType="emailAddress"
               returnKeyType="next"
-              onSubmitEditing={() => birthdayRef.current?.focus()}
+              onSubmitEditing={openPicker}
             />
-            <Field
-              inputRef={birthdayRef}
-              icon="calendar-outline"
-              placeholder="Birthday (YYYY-MM-DD)"
-              value={birthday}
-              onChangeText={update(setBirthday)}
-              keyboardType="numbers-and-punctuation"
-              maxLength={10}
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
-            />
+
+            <Pressable
+              style={[styles.inputRow, showPicker && styles.inputRowActive]}
+              onPress={openPicker}
+              accessibilityRole="button"
+              accessibilityLabel={birthday ? `Birthday, ${toDisplayDate(birthday)}` : 'Choose your birthday'}
+            >
+              <Ionicons name="calendar-outline" size={16} color={showPicker ? COLORS.strong : COLORS.icon} />
+              <Text style={[styles.dateText, !birthday && styles.datePlaceholder]}>
+                {birthday ? toDisplayDate(birthday) : 'Birthday'}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={COLORS.icon} />
+            </Pressable>
+
+            {showPicker && (
+              <View style={Platform.OS === 'ios' ? styles.pickerBox : undefined}>
+                <DateTimePicker
+                  value={birthday ?? DEFAULT_BIRTHDAY}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  maximumDate={new Date()}
+                  minimumDate={new Date(1900, 0, 1)}
+                  themeVariant="dark"
+                  textColor={COLORS.inputText}
+                  onChange={(event, date) => {
+                    if (Platform.OS === 'android') setShowPicker(false);
+                    if (event.type === 'set' && date) setBirthday(date);
+                  }}
+                />
+                {Platform.OS === 'ios' && (
+                  <Pressable
+                    style={({ pressed }) => [styles.doneButton, pressed && styles.donePressed]}
+                    onPress={() => {
+                      if (!birthday) setBirthday(DEFAULT_BIRTHDAY);
+                      setShowPicker(false);
+                      passwordRef.current?.focus();
+                    }}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.doneText}>Done</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
             <Field
               inputRef={passwordRef}
               icon="lock-closed"
@@ -350,6 +405,9 @@ const styles = StyleSheet.create({
     paddingLeft: 18,
     paddingRight: 16,
   },
+  inputRowActive: {
+    borderColor: COLORS.strong,
+  },
   input: {
     flex: 1,
     height: '100%',
@@ -357,6 +415,45 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_400Regular',
     fontSize: 16,
     color: COLORS.inputText,
+  },
+  dateText: {
+    flex: 1,
+    marginLeft: 10,
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 16,
+    color: COLORS.inputText,
+  },
+  datePlaceholder: {
+    color: COLORS.placeholder,
+  },
+  pickerBox: {
+    backgroundColor: COLORS.ink,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    paddingBottom: 12,
+    alignItems: 'center',
+  },
+  doneButton: {
+    alignSelf: 'stretch',
+    marginHorizontal: 16,
+    height: 44,
+    backgroundColor: COLORS.button,
+    borderWidth: 2,
+    borderColor: COLORS.ink,
+    borderBottomWidth: 5,
+    borderBottomColor: COLORS.buttonLedge,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  donePressed: {
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.ink,
+    transform: [{ translateY: 3 }],
+  },
+  doneText: {
+    fontFamily: 'Montserrat_500Medium',
+    fontSize: 15,
+    color: COLORS.ink,
   },
   agreeRow: {
     flexDirection: 'row',

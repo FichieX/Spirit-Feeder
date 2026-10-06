@@ -130,8 +130,11 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
     setError('');
     setLoading(true);
     try {
-      const user = await login(email.trim(), password);
-      router.replace({ pathname: '/home', params: { username: user.username } });
+      const user: any = await login(email.trim(), password);
+      router.replace({
+        pathname: '/home',
+        params: { username: user.username, userId: String(user.id ?? user.user_id) },
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
     } finally {
