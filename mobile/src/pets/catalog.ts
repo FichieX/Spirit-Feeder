@@ -28,4 +28,20 @@ export const PETS: PetDef[] = [
       ms: [90, 70, 70, 90, 70, 70, 90, 110, 170, 280, 190, 190, 190, 190],
     },
   },
+  {
+    key: 'lion',
+    name: 'Lion',
+    animalId: 2,
+    blurb: 'Brave, noble, and a symbol of the Lion of Judah.',
+    frameW: 48,
+    frameH: 45,
+    idle: {
+      sheet: require('../../assets/images/lion_spritesheet_v5.png'),
+      ms: [1000],
+    },
+    happy: {
+      sheet: require('../../assets/images/lion_spritesheet_v5.png'),
+      ms: [120, 120, 120, 120, 120, 120, 120, 120],
+    },
+  },
 ];

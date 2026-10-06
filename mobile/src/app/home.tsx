@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -16,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PetSprite from '../components/pets/PetSprite';
 import PixelArrow from '../components/pets/PixelArrow';
 import { PETS } from '../pets/catalog';
-import { selectPet } from '../api/pets';
+import { selectPet } from '../api/auth';
 
 const COLORS = {
   background: '#2B211B', // walnut
@@ -96,17 +95,26 @@ export default function Home() {
     setMode('happy');
     celebrate();
     goToStudy.current = true;
+
     try {
       const id = Number(userId);
-      if (id) await selectPet(id, pet.animalId);
-    } catch (e) {
-      // TEMPORARY: the backend save is fixed later, so carry on to the study anyway
-      console.warn('Pet save failed (fix later):', e);
-    } finally {
+      const animalId = pet.animalId ?? (index + 1);
+
+      if (id) {
+        await selectPet(id, animalId);
+      } else {
+        console.warn('No valid userId provided to pet selection screen.');
+      }
       setChosen(true);
+    } catch (e: any) {
+      console.error('Pet selection save error:', e);
+      setError(e.message || 'Could not choose this pet. Try again.');
+      goToStudy.current = false;
+    } finally {
       setBusy(false);
     }
   };
+
   const hillsH = (width * 208) / 768;
 
   return (
@@ -169,7 +177,10 @@ export default function Home() {
               onHappyDone={() => {
                 setMode('idle');
                 if (goToStudy.current) {
-                  router.replace({ pathname: '/study', params: { username, userId } });
+                  router.replace({
+                    pathname: '/study',
+                    params: { username, userId, animalId: pet.animalId },
+                  });
                 }
               }}
             />
@@ -181,7 +192,6 @@ export default function Home() {
 
       <Text style={styles.petName}>{pet.name.toUpperCase()}</Text>
       <Text style={styles.blurb}>{pet.blurb}</Text>
-      {single ? <Text style={styles.soon}>More friends coming soon</Text> : null}
 
       {error ? (
         <Text style={styles.error} accessibilityLiveRegion="polite">
@@ -281,12 +291,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 6,
     paddingHorizontal: 48,
-  },
-  soon: {
-    fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
-    color: COLORS.muted,
-    marginTop: 4,
   },
   error: {
     fontFamily: 'Montserrat_400Regular',
