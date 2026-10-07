@@ -1,5 +1,6 @@
 import os
 import json
+import random
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -312,6 +313,65 @@ def seed_database():
 seed_database()
 
 # ------------------------------------------------------------------------------
+# XP & LEVELING  (Medium Fast growth rate)
+# ------------------------------------------------------------------------------
+# Total XP needed to reach level n is n^3, so level 100 needs exactly 1,000,000 XP.
+# The level is never stored by hand: it is always derived from total XP.
+MAX_LEVEL = 100
+MAX_XP = MAX_LEVEL ** 3  # 1,000,000
+
+
+def xp_for_level(level: int) -> int:
+    """Total XP required to reach `level` (level^3)."""
+    return max(1, min(int(level), MAX_LEVEL)) ** 3
+
+
+def level_from_xp(xp: int) -> int:
+    """Highest level whose total-XP requirement (level^3) is <= xp, clamped to 1..100.
+
+    Uses an integer correction step because float cube roots can land just below a
+    whole number (e.g. 64 ** (1/3) == 3.9999999999999996).
+    """
+    xp = max(0, min(int(xp or 0), MAX_XP))
+    level = round(xp ** (1 / 3))
+    while level > 1 and level ** 3 > xp:
+        level -= 1
+    while level < MAX_LEVEL and (level + 1) ** 3 <= xp:
+        level += 1
+    return max(1, min(level, MAX_LEVEL))
+
+
+def get_feeding_xp(level: int) -> int:
+    """XP awarded for one feeding (one reading), by the pet's current level.
+
+    Levels 1-4   : random 15-50
+    Levels 5-29  : random 50-150
+    Levels 30-59 : 700
+    Levels 60+   : 1,800
+    """
+    if level < 5:
+        return random.randint(15, 50)
+    if level < 30:
+        return random.randint(50, 150)
+    if level < 60:
+        return 700
+    return 1800
+
+
+def get_quiz_xp_reward(level: int) -> int:
+    """XP awarded for finishing/beating a quiz, by the pet's current level.
+
+    Levels 1-29  : random 200-600
+    Levels 30-59 : random 1,500-3,500
+    Levels 60+   : 5,000
+    """
+    if level < 30:
+        return random.randint(200, 600)
+    if level < 60:
+        return random.randint(1500, 3500)
+    return 5000
+
+# ------------------------------------------------------------------------------
 # FASTAPI APP & SCHEMAS
 # ------------------------------------------------------------------------------
 app = FastAPI(title="Spirit-Feeder API", version="1.0.0")
@@ -395,7 +455,8 @@ def login(data: LoginRequest):
                 "birthday": user.birthday,
                 "animal_id": user.animal_id,
                 "xp": user.xp,
-                "animal_level": user.animal_level,
+                "animal_level": level_from_xp(user.xp),
+                "next_level_xp": xp_for_level(level_from_xp(user.xp) + 1),
                 "hunger": user.hunger,
                 "is_dead": user.is_dead,
                 "current_section_id": user.current_section_id or 1
@@ -453,8 +514,9 @@ def get_pet_status(user_id: int):
         return {
             "user_id": user.id,
             "animal_id": user.animal_id,
-            "animal_level": user.animal_level,
+            "animal_level": level_from_xp(user.xp),
             "xp": user.xp,
+            "next_level_xp": xp_for_level(level_from_xp(user.xp) + 1),
             "hunger": user.hunger,
             "is_dead": user.is_dead,
             "current_section_id": user.current_section_id or 1
@@ -511,10 +573,13 @@ def feed_pet(data: FeedPetRequest):
         if user.is_dead:
             raise HTTPException(status_code=400, detail="Your pet has passed away.")
 
-        # 1. Calculate XP and Level
+        # 1. Calculate XP and Level (tiered by the pet's current level; level = cbrt(total XP))
         now = datetime.utcnow()
-        new_xp = (user.xp or 0) + 100
-        new_level = (new_xp // 300) + 1
+        old_xp = user.xp or 0
+        old_level = level_from_xp(old_xp)
+        xp_gained = get_feeding_xp(old_level)
+        new_xp = min(old_xp + xp_gained, MAX_XP)
+        new_level = level_from_xp(new_xp)
 
         # 2. Increment section index
         total_sections = db.query(Section).count()
@@ -543,8 +608,11 @@ def feed_pet(data: FeedPetRequest):
         return {
             "message": "Pet fed successfully!",
             "hunger": 100,
+            "xp_gained": new_xp - old_xp,
             "xp": new_xp,
             "animal_level": new_level,
+            "leveled_up": new_level > old_level,
+            "next_level_xp": xp_for_level(new_level + 1),
             "next_section_id": next_idx
         }
     except HTTPException as he:
