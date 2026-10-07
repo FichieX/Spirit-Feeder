@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+<<<<<<< HEAD
 import {
   AccessibilityInfo,
   Alert,
@@ -15,23 +16,75 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+=======
+import { Alert, Animated, Easing, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+>>>>>>> 47de9bf (i forgot what i should commit tbbh)
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Sprite from '../components/pets/Sprite';
 import SpeechBubble from '../components/study/SpeechBubble';
 import NameModal from '../components/study/NameModal';
+import ExitModal from '../components/study/ExitModal';
+import FoodTray, { FoodCounts, FoodKind } from '../components/study/FoodTray';
 import { HungerBar, ProgressBar } from '../components/study/StatBars';
 import { fetchPetStatus, fetchNextReading, feedPet } from '../api/auth';
 import { PETS } from '../pets/catalog';
 
 const INK = '#1B1612';
 
+<<<<<<< HEAD
 // Egg animation config (shared between Donkey and Lion)
 const EGG_ANIM = {
   eggIdle: { sheet: require('../../assets/images/egg_idle.png'), ms: [520, 160, 160, 160, 300], frameW: 48, frameH: 45 },
   eggHatch: { sheet: require('../../assets/images/egg_hatch.png'), ms: [110, 110, 110, 110, 160, 160, 140], frameW: 48, frameH: 45 },
+=======
+// Pretend numbers until the backend sends real ones.
+const PRETEND = { level: 1, progress: 0.15 };
+
+// Food a brand-new pet starts with (so you can test feeding right away)
+const START_FOOD: FoodCounts = { bread: 3, water: 1, wine: 0 };
+// How much each food fills the hunger bar (1 = full)
+const FILLS: Record<FoodKind, number> = { bread: 0.15, water: 0.2, wine: 0.35 };
+// Hunger empties completely in 2 days
+const HUNGER_PER_HOUR = 1 / 48;
+// Sabbath: 6 = Saturday, 0 = Sunday
+const SABBATH_DAY = 6;
+
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 };
 
-type Stage = 'egg' | 'hatching' | 'babyHappy' | 'baby';
+// Egg + baby sprites (all share one frame size so nothing jumps between them)
+const FRAME_W = 51;
+const FRAME_H = 66;
+const PET_SCALE = 6;
+const ANIM = {
+  eggIdle: { sheet: require('../../assets/images/egg_idle.png'), ms: [520, 160, 160, 160, 300] },
+  eggHatch: { sheet: require('../../assets/images/egg_hatch.png'), ms: [110, 110, 110, 110, 160, 160, 140] },
+  idle: { sheet: require('../../assets/images/baby_idle.png'), ms: [700, 500, 700, 500] },
+  love: {
+    sheet: require('../../assets/images/baby_love.png'),
+    ms: [90, 70, 70, 90, 70, 70, 90, 110, 170, 280],
+  },
+  dance: { sheet: require('../../assets/images/baby_dance.png'), ms: [180, 180, 180, 180, 180, 180, 180, 180] },
+  read: { sheet: require('../../assets/images/baby_read.png'), ms: [600, 600, 400, 600, 600, 180, 180, 800] },
+  hungry: { sheet: require('../../assets/images/baby_hungry.png'), ms: [500, 450, 450, 450, 400, 160, 160, 600] },
+  bread: { sheet: require('../../assets/images/eat_bread.png'), ms: [260, 200, 200, 200, 200, 200, 450, 650] },
+  water: { sheet: require('../../assets/images/eat_water.png'), ms: [260, 220, 220, 220, 220, 260, 450, 650] },
+  wine: { sheet: require('../../assets/images/eat_wine.png'), ms: [260, 240, 240, 240, 240, 320, 450, 700] },
+>>>>>>> 47de9bf (i forgot what i should commit tbbh)
+};
+
+type Stage = 'egg' | 'hatching' | 'baby';
+type Mood = 'idle' | 'love' | 'dance' | 'read' | FoodKind;
+
+// Below this the pet looks hungry instead of its normal idle
+const HUNGRY_BELOW = 0.3;
+
+// How long the random moods last before going back to idle (ms)
+const MOOD_LENGTH = { dance: 4300, read: 8000 };
 
 // Room art tile dimensions
 const WALL_W = 256;
@@ -42,12 +95,15 @@ export default function Study() {
   const { username, userId } = useLocalSearchParams<{ username?: string; userId?: string }>();
   const numericUserId = Number(userId) || 1;
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { width, height } = useWindowDimensions();
 
   // Room & Animation States
   const [stage, setStage] = useState<Stage>('egg');
+  const [mood, setMood] = useState<Mood>('idle');
   const [petName, setPetName] = useState('');
   const [naming, setNaming] = useState(false);
+<<<<<<< HEAD
   const [animalId, setAnimalId] = useState<number>(1);
 
   // Live Game Stats State
@@ -117,29 +173,116 @@ export default function Study() {
 
   // Breathing animation loop
   const bob = useRef(new Animated.Value(0)).current;
+=======
+  const [loaded, setLoaded] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [trayOpen, setTrayOpen] = useState(false);
+  const [food, setFood] = useState<FoodCounts>(START_FOOD);
+  const [hunger, setHunger] = useState(0.7);
+  const [wineDate, setWineDate] = useState('');
+
+  // Remember the pet on this phone (one save per account)
+  const saveKey = `pet:${username ?? 'guest'}`;
+
+>>>>>>> 47de9bf (i forgot what i should commit tbbh)
   useEffect(() => {
-    if (stage !== 'baby') return;
-    let loop: Animated.CompositeAnimation | null = null;
-    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
-      if (reduce) return;
-      loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(bob, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-          Animated.timing(bob, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        ]),
-      );
-      loop.start();
-    });
-    return () => loop?.stop();
-  }, [stage]);
+    AsyncStorage.getItem(saveKey)
+      .then((raw) => {
+        const saved: {
+          stage?: Stage;
+          name?: string;
+          food?: FoodCounts;
+          hunger?: number;
+          updatedAt?: number;
+          wineDate?: string;
+        } = raw ? JSON.parse(raw) : {};
+        if (saved.stage === 'baby') setStage('baby');
+        if (saved.name) setPetName(saved.name);
+
+        // Hunger goes down while you're away
+        let h = typeof saved.hunger === 'number' ? saved.hunger : 0.7;
+        if (saved.updatedAt) {
+          const hoursAway = (Date.now() - saved.updatedAt) / 3600000;
+          h = Math.max(0, h - hoursAway * HUNGER_PER_HOUR);
+        }
+        setHunger(h);
+
+        // Free wine once every Sabbath
+        const f = { ...START_FOOD, ...(saved.food ?? {}) };
+        let wd = saved.wineDate ?? '';
+        if (new Date().getDay() === SABBATH_DAY && wd !== todayKey()) {
+          f.wine += 1;
+          wd = todayKey();
+        }
+        setFood(f);
+        setWineDate(wd);
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [saveKey]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const keep = stage === 'baby' ? 'baby' : 'egg';
+    AsyncStorage.setItem(
+      saveKey,
+      JSON.stringify({ pet: 'donkey', stage: keep, name: petName, food, hunger, wineDate, updatedAt: Date.now() }),
+    ).catch(() => {});
+  }, [loaded, stage, petName, food, hunger, wineDate, saveKey]);
+
+  const full = hunger >= 0.99;
+  const hungry = stage === 'baby' && hunger < HUNGRY_BELOW;
+  const eating = mood === 'bread' || mood === 'water' || mood === 'wine';
+
+  // "+15" with a heart that floats up over the pet after feeding
+  const [popText, setPopText] = useState('');
+  const pop = useRef(new Animated.Value(0)).current;
+
+  const feed = (kind: FoodKind) => {
+    if (food[kind] <= 0 || full || eating) return;
+    setFood((f) => ({ ...f, [kind]: f[kind] - 1 }));
+    setTrayOpen(false);
+    setMood(kind); // plays the eating / drinking animation
+  };
+
+  // Called when the eating animation finishes: fill the bar and show the pop
+  const finishMeal = (kind: FoodKind) => {
+    setHunger((h) => Math.min(1, h + FILLS[kind]));
+    setMood('idle');
+    setPopText(`+${Math.round(FILLS[kind] * 100)}`);
+    pop.setValue(0);
+    Animated.timing(pop, { toValue: 1, duration: 1300, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(
+      () => setPopText(''),
+    );
+  };
+
+  // While idle, every few seconds pick a random mood: dance or read the Bible
+  useEffect(() => {
+    if (stage !== 'baby' || naming || leaving || trayOpen) return;
+    if (mood === 'idle' && !hungry) {
+      const t = setTimeout(() => setMood(Math.random() < 0.5 ? 'dance' : 'read'), 5000 + Math.random() * 5000);
+      return () => clearTimeout(t);
+    }
+    if (mood === 'dance' || mood === 'read') {
+      const t = setTimeout(() => setMood('idle'), MOOD_LENGTH[mood]);
+      return () => clearTimeout(t);
+    }
+  }, [stage, mood, naming, leaving, trayOpen, hungry]);
 
   const tapPet = () => {
     if (stage === 'egg') setStage('hatching');
-    else if (stage === 'baby') setStage('babyHappy');
+    else if (stage === 'baby' && mood !== 'love' && !eating) setMood('love');
   };
 
+<<<<<<< HEAD
   // Match selected animal from catalog definition
   const selectedPetDef = PETS.find((p) => p.animalId === animalId) || PETS[0];
+=======
+  const babyAnim = mood === 'idle' && hungry ? 'hungry' : mood;
+  const anim = stage === 'egg' ? ANIM.eggIdle : stage === 'hatching' ? ANIM.eggHatch : ANIM[babyAnim];
+  const animKey = stage === 'baby' ? `baby-${babyAnim}` : stage;
+  const loops = stage === 'egg' || (stage === 'baby' && (mood === 'idle' || mood === 'dance' || mood === 'read'));
+>>>>>>> 47de9bf (i forgot what i should commit tbbh)
 
   const currentAnim =
     stage === 'egg'
@@ -153,6 +296,7 @@ export default function Study() {
   const PET_SCALE = 4;
   const floorH = Math.round(height * 0.23);
   const floorTileW = Math.round(floorH * FLOOR_RATIO);
+<<<<<<< HEAD
   const petW = currentAnim.frameW * PET_SCALE;
   const petBottom = floorH - 60;
 
@@ -164,6 +308,10 @@ export default function Study() {
       </View>
     );
   }
+=======
+  const petW = FRAME_W * PET_SCALE;
+  const petBottom = floorH - 70; // feet stand a little way into the floor
+>>>>>>> 47de9bf (i forgot what i should commit tbbh)
 
   return (
     <View style={styles.screen}>
@@ -228,6 +376,7 @@ export default function Study() {
         />
       </View>
 
+<<<<<<< HEAD
       {/* FEED Button */}
       <TouchableOpacity
         style={[styles.feedBannerButton, { bottom: insets.bottom + 40 }]}
@@ -269,11 +418,17 @@ export default function Study() {
       {/* "Tap to hatch" speech bubble */}
       {stage === 'egg' ? (
         <View style={[styles.bubbleWrap, { bottom: petBottom + 130, left: width / 2 }]} pointerEvents="none">
+=======
+      {/* "Tap to hatch" bubble, only while it's still an egg */}
+      {loaded && stage === 'egg' ? (
+        <View style={[styles.bubbleWrap, { bottom: petBottom + 26 * PET_SCALE, left: width / 2 }]} pointerEvents="none">
+>>>>>>> 47de9bf (i forgot what i should commit tbbh)
           <SpeechBubble text="Tap to hatch" />
         </View>
       ) : null}
 
       {/* The pet */}
+<<<<<<< HEAD
       <Pressable
         onPress={tapPet}
         disabled={stage === 'hatching' || stage === 'babyHappy'}
@@ -290,18 +445,114 @@ export default function Study() {
             ms={currentAnim.ms}
             frameW={currentAnim.frameW}
             frameH={currentAnim.frameH}
+=======
+      {loaded ? (
+        <Pressable
+          onPress={tapPet}
+          disabled={stage === 'hatching'}
+          accessibilityRole="button"
+          accessibilityLabel={
+            stage === 'egg' ? 'Egg. Tap to hatch' : `${petName || 'Your baby donkey'}. Tap to give love`
+          }
+          style={{ position: 'absolute', bottom: petBottom, left: (width - petW) / 2 }}
+        >
+          <Sprite
+            key={animKey}
+            sheet={anim.sheet}
+            ms={anim.ms}
+            frameW={FRAME_W}
+            frameH={FRAME_H}
+>>>>>>> 47de9bf (i forgot what i should commit tbbh)
             scale={PET_SCALE}
-            loop={stage === 'egg' || stage === 'baby'}
+            loop={loops}
             onDone={() => {
-              if (stage === 'hatching') setStage('babyHappy');
-              else if (stage === 'babyHappy') {
+              if (mood === 'bread' || mood === 'water' || mood === 'wine') {
+                finishMeal(mood);
+              } else if (stage === 'hatching') {
                 setStage('baby');
+                setMood('love');
+              } else if (mood === 'love') {
+                setMood('idle');
                 if (!petName) setNaming(true);
               }
             }}
           />
+        </Pressable>
+      ) : null}
+
+      {/* Floating "+15" after a meal */}
+      {popText ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.pop,
+            {
+              bottom: petBottom + 50 * PET_SCALE,
+              left: width / 2 - 50,
+              opacity: pop.interpolate({ inputRange: [0, 0.15, 0.75, 1], outputRange: [0, 1, 1, 0] }),
+              transform: [{ translateY: pop.interpolate({ inputRange: [0, 1], outputRange: [20, -40] }) }],
+            },
+          ]}
+        >
+          <Image source={require('../../assets/images/icon_heart.png')} style={styles.popHeart} />
+          <Text style={styles.popText}>{popText}</Text>
         </Animated.View>
+      ) : null}
+
+      {/* Bottom-left: exit door */}
+      <Pressable
+        onPress={() => setLeaving(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Exit"
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.exit,
+          { bottom: insets.bottom + 14 },
+          pressed && { transform: [{ scale: 0.92 }] },
+        ]}
+      >
+        <Image source={require('../../assets/images/icon_door.png')} style={styles.exitIcon} />
+        <Text style={styles.menuLabel}>exit</Text>
       </Pressable>
+
+      {/* Bottom-right: food basket (only once hatched) */}
+      {stage === 'baby' ? (
+        <Pressable
+          onPress={() => setTrayOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Open food basket"
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.food,
+            { bottom: insets.bottom + 14 },
+            pressed && { transform: [{ scale: 0.92 }] },
+          ]}
+        >
+          <Image source={require('../../assets/images/food_bread.png')} style={styles.exitIcon} />
+          <Text style={styles.menuLabel}>food</Text>
+        </Pressable>
+      ) : null}
+
+      <FoodTray
+        visible={trayOpen}
+        counts={food}
+        petName={petName}
+        full={full}
+        onFeed={feed}
+        onClose={() => setTrayOpen(false)}
+        onRead={() => Alert.alert('Read a verse', 'The reading room is coming next!')}
+        onMemorize={() => Alert.alert('Memorize', 'Memorization is coming soon!')}
+      />
+
+      <ExitModal
+        visible={leaving}
+        petName={petName}
+        onStay={() => setLeaving(false)}
+        onLeave={() => {
+          setLeaving(false);
+          router.replace('/');
+        }}
+      />
 
       <NameModal
         visible={naming}
@@ -358,6 +609,19 @@ const styles = StyleSheet.create({
     color: '#F5ECD2',
     textShadowColor: INK,
     textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0,
+  },
+  exit: { position: 'absolute', left: 16, alignItems: 'center' },
+  exitIcon: { width: 54, height: 54 },
+  food: { position: 'absolute', right: 16, alignItems: 'center' },
+  pop: { position: 'absolute', width: 100, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  popHeart: { width: 28, height: 28 },
+  popText: {
+    fontFamily: 'Silkscreen_700Bold',
+    fontSize: 24,
+    color: '#F2BE4A',
+    textShadowColor: INK,
+    textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 0,
   },
   bubbleWrap: { position: 'absolute', right: 12, alignItems: 'flex-start' },

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import PetSprite from '../components/pets/PetSprite';
 import PixelArrow from '../components/pets/PixelArrow';
 import { PETS } from '../pets/catalog';
@@ -40,6 +41,7 @@ export default function Home() {
   const goToStudy = useRef(false);
   const { width } = useWindowDimensions();
 
+  const [checking, setChecking] = useState(true);
   const [index, setIndex] = useState(0);
   const [mode, setMode] = useState<'idle' | 'happy'>('idle');
   const [chosen, setChosen] = useState(false);
@@ -59,6 +61,19 @@ export default function Home() {
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then((v) => (reduceMotion.current = v));
   }, []);
+
+  // Already have a pet on this account? Skip picking and go straight to the study.
+  useEffect(() => {
+    AsyncStorage.getItem(`pet:${username ?? 'guest'}`)
+      .then((saved) => {
+        if (saved) {
+          router.replace({ pathname: '/study', params: { username, userId } });
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => setChecking(false));
+  }, [username]);
 
   const go = (dir: 1 | -1) => {
     if (busy || single) return;
@@ -95,7 +110,6 @@ export default function Home() {
     setMode('happy');
     celebrate();
     goToStudy.current = true;
-
     try {
       const id = Number(userId);
       const animalId = pet.animalId ?? (index + 1);
@@ -105,6 +119,11 @@ export default function Home() {
       } else {
         console.warn('No valid userId provided to pet selection screen.');
       }
+      // Remember the choice on this phone so next login skips this screen
+      AsyncStorage.setItem(
+        `pet:${username ?? 'guest'}`,
+        JSON.stringify({ pet: pet.key, stage: 'egg', name: '' }),
+      ).catch(() => {});
       setChosen(true);
     } catch (e: any) {
       console.error('Pet selection save error:', e);
@@ -116,6 +135,9 @@ export default function Home() {
   };
 
   const hillsH = (width * 208) / 768;
+
+  // Blank walnut screen for a split second while we check for a saved pet
+  if (checking) return <View style={styles.screen} />;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
