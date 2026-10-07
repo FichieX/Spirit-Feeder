@@ -23,6 +23,22 @@ import FoodTray, { FoodCounts, FoodKind } from '../components/study/FoodTray';
 import TestPanel, { isTester, type TestGroup } from '../components/study/TestPanel';
 import { HungerBar, ProgressBar } from '../components/study/StatBars';
 import { fetchPetStatus, fetchNextReading, feedPet } from '../api/auth';
+import {
+  ADULT_LEVEL,
+  ADULTS,
+  ALL_SHEETS,
+  BABIES,
+  EGG,
+  PET_BY_ANIMAL,
+  PET_SCALE,
+  TEEN_LEVEL,
+  TEENS,
+  type Anim,
+} from '../pets/forms';
+import { loadPowers, savePowers } from '../battle/powerups';
+
+// A serpent ambushes the pet every 5 levels (Lv 5, 10, 15 ...)
+const SERPENT_EVERY = 5;
 
 const INK = '#1B1612';
 
@@ -40,207 +56,6 @@ const todayKey = () => {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 };
 
-const PET_SCALE = 6;
-
-type Anim = { sheet: number; ms: number[] };
-
-// Egg (same for every pet). Frames are 51 x 66 pixel-art pixels.
-const EGG = {
-  frameW: 51,
-  frameH: 66,
-  idle: { sheet: require('../../assets/images/egg_idle.png'), ms: [520, 160, 160, 160, 300] },
-  hatch: { sheet: require('../../assets/images/egg_hatch.png'), ms: [110, 110, 110, 110, 160, 160, 140] },
-};
-
-// Baby animations for each pet.
-//   tap    = what it does when you tap it (donkey: love, lion: roar)
-//   moods  = random things it does on its own while idle
-type BabyAnims = {
-  frameW: number;
-  frameH: number;
-  idle: Anim;
-  tap: Anim;
-  hungry: Anim;
-  dance?: Anim;
-  read: Anim;
-  bread: Anim;
-  water: Anim;
-  wine: Anim;
-  moods: ('dance' | 'read')[];
-  // Falling-over animation before the "passed away" screen (its frames are wider)
-  die?: { frameW: number; frameH: number; anim: Anim };
-  scale?: number; // grown-ups are drawn a bit bigger
-};
-
-const DIE_MS = [150, 150, 150, 200, 160, 140, 140, 160, 260, 260, 300, 400, 400, 900];
-
-// Levels when the pet grows: baby -> teen (young) -> adult
-const TEEN_LEVEL = 5;
-const ADULT_LEVEL = 10;
-const READ_MS = [600, 600, 400, 600, 600, 180, 180, 800];
-
-const BABIES: Record<string, BabyAnims> = {
-  donkey: {
-    frameW: 51,
-    frameH: 66,
-    idle: { sheet: require('../../assets/images/baby_idle.png'), ms: [700, 500, 700, 500] },
-    tap: { sheet: require('../../assets/images/baby_love.png'), ms: [90, 70, 70, 90, 70, 70, 90, 110, 170, 280] },
-    hungry: { sheet: require('../../assets/images/baby_hungry.png'), ms: [500, 450, 450, 450, 400, 160, 160, 600] },
-    dance: { sheet: require('../../assets/images/baby_dance.png'), ms: [180, 180, 180, 180, 180, 180, 180, 180] },
-    read: { sheet: require('../../assets/images/baby_read.png'), ms: [600, 600, 400, 600, 600, 180, 180, 800] },
-    bread: { sheet: require('../../assets/images/eat_bread.png'), ms: [260, 200, 200, 200, 200, 200, 450, 650] },
-    water: { sheet: require('../../assets/images/eat_water.png'), ms: [260, 220, 220, 220, 220, 260, 450, 650] },
-    wine: { sheet: require('../../assets/images/eat_wine.png'), ms: [260, 240, 240, 240, 240, 320, 450, 700] },
-    moods: ['dance', 'read'],
-  },
-  lion: {
-    frameW: 49,
-    frameH: 63,
-    idle: { sheet: require('../../assets/images/lion_baby_idle.png'), ms: [260, 220, 220, 220, 260, 220, 220, 220] },
-    // Proud little roar when tapped
-    tap: {
-      sheet: require('../../assets/images/lion_baby_roar.png'),
-      ms: [160, 140, 180, 110, 110, 110, 110, 260, 200, 300],
-    },
-    hungry: {
-      sheet: require('../../assets/images/lion_baby_hungry.png'),
-      ms: [500, 450, 450, 450, 400, 300, 300, 600],
-    },
-    read: {
-      sheet: require('../../assets/images/lion_baby_read.png'),
-      ms: [500, 400, 300, 500, 500, 500, 500, 400, 500, 500, 500, 700],
-    },
-    // No lion eating drawings yet, so it does its happy hearts when fed
-    bread: { sheet: require('../../assets/images/lion_baby_love.png'), ms: [110, 100, 100, 110, 120, 140, 180, 300] },
-    water: { sheet: require('../../assets/images/lion_baby_love.png'), ms: [110, 100, 100, 110, 120, 140, 180, 300] },
-    wine: { sheet: require('../../assets/images/lion_baby_love.png'), ms: [110, 100, 100, 110, 120, 140, 180, 300] },
-    moods: ['read'],
-    die: { frameW: 59, frameH: 63, anim: { sheet: require('../../assets/images/lion_baby_die.png'), ms: DIE_MS } },
-  },
-};
-
-// Teen (young) animations, from TEEN_LEVEL. Same names as the babies.
-const DONKEY_IDLE: Anim = {
-  sheet: require('../../assets/images/donkey_idle.png'),
-  ms: [190, 190, 190, 190, 190, 190, 190, 190, 190, 190, 190, 190, 140, 190, 190, 190],
-};
-const DONKEY_HAPPY: Anim = {
-  sheet: require('../../assets/images/donkey_happy.png'),
-  ms: [90, 70, 70, 90, 70, 70, 90, 110, 170, 280, 190, 190, 190, 190],
-};
-const LION_LOVE: Anim = {
-  sheet: require('../../assets/images/lion_love.png'),
-  ms: [110, 100, 100, 110, 120, 140, 180, 300],
-};
-
-const TEENS: Record<string, BabyAnims> = {
-  donkey: {
-    frameW: 43,
-    frameH: 69,
-    idle: DONKEY_IDLE,
-    tap: DONKEY_HAPPY,
-    hungry: DONKEY_IDLE,
-    read: { sheet: require('../../assets/images/donkey_read.png'), ms: READ_MS },
-    bread: DONKEY_HAPPY,
-    water: DONKEY_HAPPY,
-    wine: DONKEY_HAPPY,
-    moods: ['read'],
-  },
-  lion: {
-    frameW: 56,
-    frameH: 70,
-    idle: { sheet: require('../../assets/images/lion_idle.png'), ms: [220, 180, 180, 180, 220, 180, 180, 180] },
-    // Proud roar when tapped
-    tap: {
-      sheet: require('../../assets/images/lion_happy.png'),
-      ms: [160, 140, 180, 110, 110, 110, 110, 260, 200, 300],
-    },
-    hungry: {
-      sheet: require('../../assets/images/lion_hungry.png'),
-      ms: [500, 450, 450, 450, 400, 300, 300, 600],
-    },
-    read: {
-      sheet: require('../../assets/images/lion_read.png'),
-      ms: [500, 400, 300, 500, 500, 500, 500, 400, 500, 500, 500, 700],
-    },
-    bread: LION_LOVE,
-    water: LION_LOVE,
-    wine: LION_LOVE,
-    moods: ['read'],
-    die: { frameW: 80, frameH: 70, anim: { sheet: require('../../assets/images/lion_die.png'), ms: DIE_MS } },
-  },
-};
-
-// Adult animations, from ADULT_LEVEL.
-// Donkey: red saddle blanket + bridle. Lion: dark red mane, angry brows, red eyes.
-const DONKEY_ADULT_HAPPY: Anim = {
-  sheet: require('../../assets/images/donkey_adult_happy.png'),
-  ms: [90, 70, 70, 90, 70, 70, 90, 110, 170, 280, 190, 190, 190, 190],
-};
-const LION_ADULT_LOVE: Anim = {
-  sheet: require('../../assets/images/lion_adult_love.png'),
-  ms: [110, 100, 100, 110, 120, 140, 180, 300],
-};
-
-const ADULTS: Record<string, BabyAnims> = {
-  donkey: {
-    frameW: 43,
-    frameH: 69,
-    scale: 7,
-    idle: {
-      sheet: require('../../assets/images/donkey_adult_idle.png'),
-      ms: [190, 190, 190, 190, 190, 190, 190, 190, 190, 190, 190, 190, 140, 190, 190, 190],
-    },
-    tap: DONKEY_ADULT_HAPPY,
-    hungry: {
-      sheet: require('../../assets/images/donkey_adult_idle.png'),
-      ms: [190, 190, 190, 190, 190, 190, 190, 190, 190, 190, 190, 190, 140, 190, 190, 190],
-    },
-    read: { sheet: require('../../assets/images/donkey_adult_read.png'), ms: READ_MS },
-    bread: DONKEY_ADULT_HAPPY,
-    water: DONKEY_ADULT_HAPPY,
-    wine: DONKEY_ADULT_HAPPY,
-    moods: ['read'],
-  },
-  lion: {
-    frameW: 56,
-    frameH: 70,
-    scale: 7,
-    idle: { sheet: require('../../assets/images/lion_adult_idle.png'), ms: [220, 180, 180, 180, 220, 180, 180, 180] },
-    // Fierce roar when tapped
-    tap: {
-      sheet: require('../../assets/images/lion_adult_happy.png'),
-      ms: [160, 140, 180, 110, 110, 110, 110, 260, 200, 300],
-    },
-    hungry: {
-      sheet: require('../../assets/images/lion_adult_hungry.png'),
-      ms: [500, 450, 450, 450, 400, 300, 300, 600],
-    },
-    read: {
-      sheet: require('../../assets/images/lion_adult_read.png'),
-      ms: [500, 400, 300, 500, 500, 500, 500, 400, 500, 500, 500, 700],
-    },
-    bread: LION_ADULT_LOVE,
-    water: LION_ADULT_LOVE,
-    wine: LION_ADULT_LOVE,
-    moods: ['read'],
-    die: { frameW: 80, frameH: 70, anim: { sheet: require('../../assets/images/lion_adult_die.png'), ms: DIE_MS } },
-  },
-};
-
-// Every sheet the study can show, loaded ahead of time so nothing blinks
-const ALL_SHEETS = [
-  EGG.idle.sheet,
-  EGG.hatch.sheet,
-  ...[...Object.values(BABIES), ...Object.values(TEENS), ...Object.values(ADULTS)].flatMap((b) =>
-    [b.idle, b.tap, b.hungry, b.dance, b.read, b.bread, b.water, b.wine, b.die?.anim]
-      .filter((a): a is Anim => !!a)
-      .map((a) => a.sheet),
-  ),
-];
-
-// animal_id from the server -> which baby
-const PET_BY_ANIMAL: Record<number, string> = { 1: 'donkey', 2: 'lion' };
 
 type Stage = 'egg' | 'hatching' | 'baby';
 type Mood = 'idle' | 'tap' | 'dance' | 'read' | 'die' | FoodKind;
@@ -257,10 +72,11 @@ const WALL_H = 192;
 const FLOOR_RATIO = 512 / 224;
 
 export default function Study() {
-  const { username, userId, animalId: animalParam } = useLocalSearchParams<{
+  const { username, userId, animalId: animalParam, from } = useLocalSearchParams<{
     username?: string;
     userId?: string;
     animalId?: string;
+    from?: string; // 'battle' when coming back from a serpent fight
   }>();
   const numericUserId = Number(userId) || 0;
   const insets = useSafeAreaInsets();
@@ -291,7 +107,11 @@ export default function Study() {
   const teen = !adult && level >= TEEN_LEVEL;
   const form = adult ? 'adult' : teen ? 'teen' : 'baby';
   const baby = (adult ? ADULTS : teen ? TEENS : BABIES)[petKey];
-  const [progress, setProgress] = useState(0);
+  const [serverProgress, setProgress] = useState(0);
+  // Serpent battles: which ones are beaten, and XP lost to the serpent this level
+  const [serpentBeaten, setSerpentBeaten] = useState<number[]>([]);
+  const [xpLoss, setXpLoss] = useState({ amount: 0, level: 0 });
+  const progress = Math.max(0, serverProgress - (xpLoss.level === level ? xpLoss.amount : 0));
   const [isDead, setIsDead] = useState(false);
 
   // Scripture reading screen
@@ -332,7 +152,12 @@ export default function Study() {
           updatedAt?: number;
           wineDate?: string;
           animalId?: number;
+          serpentBeaten?: number[];
+          xpLoss?: number;
+          xpLossLevel?: number;
         } = raw ? JSON.parse(raw) : {};
+        setSerpentBeaten(saved.serpentBeaten ?? []);
+        setXpLoss({ amount: saved.xpLoss ?? 0, level: saved.xpLossLevel ?? 0 });
         if (!animalParam && saved.animalId) {
           setAnimalId(saved.animalId);
           petChosen.current = true;
@@ -370,9 +195,69 @@ export default function Study() {
     const keep = stage === 'baby' ? 'baby' : 'egg';
     AsyncStorage.setItem(
       saveKey,
-      JSON.stringify({ pet: petKey, animalId, stage: keep, name: petName, food, hunger, wineDate, updatedAt: Date.now() }),
+      JSON.stringify({
+        pet: petKey,
+        animalId,
+        stage: keep,
+        name: petName,
+        food,
+        hunger,
+        wineDate,
+        serpentBeaten,
+        xpLoss: xpLoss.amount,
+        xpLossLevel: xpLoss.level,
+        updatedAt: Date.now(),
+      }),
     ).catch(() => {});
-  }, [loaded, stage, petName, food, hunger, wineDate, animalId, saveKey]);
+  }, [loaded, stage, petName, food, hunger, wineDate, animalId, saveKey, serpentBeaten, xpLoss]);
+
+  // ---- Serpent ambush: every 5 levels ----
+  const [ambush, setAmbush] = useState(false);
+  const ambushShake = useRef(new Animated.Value(0)).current;
+  const milestone = Math.floor(level / SERPENT_EVERY) * SERPENT_EVERY;
+
+  const startBattle = (m: number) => {
+    setTestOpen(false);
+    setTrayOpen(false);
+    router.replace({
+      pathname: '/battle',
+      params: {
+        username: username ?? '',
+        userId: userId ?? '',
+        animalId: String(animalId),
+        level: String(level),
+        milestone: String(Math.max(SERPENT_EVERY, m)),
+        petName: petName || 'Your pet',
+      },
+    });
+  };
+
+  const serpentAttacks = (m: number) => {
+    setAmbush(true);
+    ambushShake.setValue(0);
+    Animated.sequence(
+      [14, -14, 10, -10, 6, -6, 0].map((v) => Animated.timing(ambushShake, { toValue: v, duration: 60, useNativeDriver: true })),
+    ).start();
+    setTimeout(() => {
+      setAmbush(false);
+      startBattle(m);
+    }, 1600);
+  };
+
+  // Check once the pet has loaded: a new 5-level milestone that isn't beaten yet = ambush!
+  // (Not right after coming back from a battle, so a lost fight doesn't restart instantly.)
+  const checkedMilestone = useRef<number | null>(null);
+  useEffect(() => {
+    if (!loaded || checkedMilestone.current === milestone) return;
+    if (stage !== 'baby' || isDead || milestone < SERPENT_EVERY) return;
+    const t = setTimeout(() => {
+      const firstCheck = checkedMilestone.current === null;
+      checkedMilestone.current = milestone;
+      if (firstCheck && from === 'battle') return; // just fought it
+      if (!serpentBeaten.includes(milestone)) serpentAttacks(milestone);
+    }, 1500); // wait for the server's level to arrive
+    return () => clearTimeout(t);
+  }, [loaded, stage, isDead, milestone, serpentBeaten, from]);
 
   const full = hunger >= 0.99;
   const hungry = stage === 'baby' && hunger < HUNGRY_BELOW;
@@ -462,8 +347,8 @@ export default function Study() {
         : dieSet
           ? dieSet.anim
           : ((babyAnim === 'die' ? undefined : (baby[babyAnim] as Anim | undefined)) ?? baby.idle);
-  const frameW = isEgg ? EGG.frameW : dieSet ? dieSet.frameW : baby.frameW;
-  const frameH = isEgg ? EGG.frameH : dieSet ? dieSet.frameH : baby.frameH;
+  const frameW = isEgg ? EGG.frameW : dieSet ? dieSet.frameW : (anim.w ?? baby.frameW);
+  const frameH = isEgg ? EGG.frameH : dieSet ? dieSet.frameH : (anim.h ?? baby.frameH);
   const animKey = stage === 'baby' ? `${petKey}-${form}-${babyAnim}` : stage;
   const scale = isEgg ? PET_SCALE : (baby.scale ?? PET_SCALE);
   const loops = stage === 'egg' || (stage === 'baby' && (mood === 'idle' || mood === 'dance' || mood === 'read'));
@@ -527,8 +412,9 @@ export default function Study() {
       actions: [
         { label: 'Donkey', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(1); } },
         { label: 'Lion', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(2); } },
-        { label: 'Back to egg', onPress: () => { setTestOpen(false); setMood('idle'); setPetName(''); setStage('egg'); } },
-        { label: 'Hatch now', onPress: () => { setTestOpen(false); setStage('hatching'); } },
+        // A new egg always hatches into a baby, so these also reset the level to 1
+        { label: 'Back to egg', onPress: () => { setTestOpen(false); setMood('idle'); setPetName(''); setLevel(1); setProgress(0); setStage('egg'); } },
+        { label: 'Hatch now', onPress: () => { setTestOpen(false); setLevel(1); setProgress(0); setStage('hatching'); } },
       ],
     },
     {
@@ -538,9 +424,25 @@ export default function Study() {
         { label: 'Level 1 (baby)', onPress: () => { setMood('idle'); setLevel(1); } },
         { label: `Teen (Lv ${TEEN_LEVEL})`, onPress: () => { setStage('baby'); setLevel(TEEN_LEVEL); setMood('tap'); } },
         { label: `Adult (Lv ${ADULT_LEVEL})`, onPress: () => { setStage('baby'); setLevel(ADULT_LEVEL); setMood('tap'); } },
-        { label: 'XP 0%', onPress: () => setProgress(0) },
+        { label: 'XP 0%', onPress: () => { setXpLoss({ amount: 0, level: 0 }); setProgress(0); } },
         { label: 'XP 50%', onPress: () => setProgress(0.5) },
         { label: 'XP 95%', onPress: () => setProgress(0.95) },
+      ],
+    },
+    {
+      title: 'Battle',
+      actions: [
+        { label: 'Serpent battle', onPress: () => startBattle(milestone) },
+        { label: 'Serpent ambush', onPress: () => { setTestOpen(false); serpentAttacks(milestone); } },
+        { label: 'Forget beaten serpents', onPress: () => setSerpentBeaten([]) },
+        {
+          label: '+1 each power-up',
+          onPress: async () => {
+            const bag = await loadPowers(username);
+            await savePowers(username, { freeze: bag.freeze + 1, shield: bag.shield + 1, fifty: bag.fifty + 1 });
+            Alert.alert('Power-ups', 'Added +1 Freeze Time, +1 Immunity and +1 Eliminate.');
+          },
+        },
       ],
     },
     {
@@ -556,6 +458,10 @@ export default function Study() {
             setMood('idle');
             setPetName('');
             setStage('egg');
+            setLevel(1);
+            setProgress(0);
+            setSerpentBeaten([]);
+            setXpLoss({ amount: 0, level: 0 });
             setFood(START_FOOD);
             setHunger(0.7);
           },
@@ -590,7 +496,7 @@ export default function Study() {
   }
 
   return (
-    <View style={styles.screen}>
+    <Animated.View style={[styles.screen, { transform: [{ translateX: ambushShake }] }]}>
       <PreloadSheets sheets={ALL_SHEETS} />
 
       {/* Brick wall, tiled */}
@@ -652,8 +558,10 @@ export default function Study() {
           source={require('../../assets/images/icon_coin.png')}
           onPress={() =>
             Alert.alert(
-              'Battle locked',
-              `Battles unlock when ${petName || 'your pet'} grows up. Keep feeding with Scripture!`,
+              'Battles',
+              level < SERPENT_EVERY
+                ? `A serpent will ambush ${petName || 'your pet'} at Lv ${SERPENT_EVERY}, then every ${SERPENT_EVERY} levels. Keep reading Scripture to be ready!`
+                : `Next serpent at Lv ${milestone + SERPENT_EVERY}. Battles against other players are coming soon!`,
             )
           }
         />
@@ -831,7 +739,17 @@ export default function Study() {
           {username}'s study
         </Text>
       ) : null}
-    </View>
+
+      {/* Serpent ambush warning */}
+      {ambush ? (
+        <View style={styles.ambushBackdrop} pointerEvents="none">
+          <View style={styles.ambushBox}>
+            <Text style={styles.ambushTitle}>A SERPENT APPEARS!</Text>
+            <Text style={styles.ambushSub}>Answer with the Word to drive it away</Text>
+          </View>
+        </View>
+      ) : null}
+    </Animated.View>
   );
 }
 
@@ -851,6 +769,15 @@ function MenuIcon({ label, source, onPress }: { label: string; source: number; o
 }
 
 const styles = StyleSheet.create({
+  ambushBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(120,30,20,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ambushBox: { backgroundColor: INK, borderWidth: 3, borderColor: '#E06A4F', paddingHorizontal: 18, paddingVertical: 14 },
+  ambushTitle: { fontFamily: 'Silkscreen_700Bold', fontSize: 22, color: '#E06A4F', textAlign: 'center' },
+  ambushSub: { fontFamily: 'Montserrat_500Medium', fontSize: 14, color: '#E8D9B5', textAlign: 'center', marginTop: 6 },
   screen: { flex: 1, backgroundColor: '#3A2A1E' },
   floor: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden' },
   hud: { position: 'absolute', left: 18 },
