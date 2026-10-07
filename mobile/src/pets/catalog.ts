@@ -1,5 +1,4 @@
-// Every pet the player can choose. To add a new pet later, export its two
-// sprite sheets (idle + happy) in the same 4-column grid and add an entry here.
+// Every pet the player can choose 
 export type PetDef = {
   key: string;
   name: string;
@@ -33,15 +32,16 @@ export const PETS: PetDef[] = [
     name: 'Lion',
     animalId: 2,
     blurb: 'Brave, noble, and a symbol of the Lion of Judah.',
-    frameW: 48,
-    frameH: 45,
+    frameW: 56,
+    frameH: 58,
     idle: {
-      sheet: require('../../assets/images/lion_spritesheet_v5.png'),
-      ms: [1000],
+      sheet: require('../../assets/images/lion_idle.png'),
+      ms: [220, 180, 180, 180, 220, 180, 180, 180],
     },
+    // Proud roar when picked
     happy: {
-      sheet: require('../../assets/images/lion_spritesheet_v5.png'),
-      ms: [120, 120, 120, 120, 120, 120, 120, 120],
+      sheet: require('../../assets/images/lion_happy.png'),
+      ms: [160, 140, 180, 110, 110, 110, 110, 260, 200, 300],
     },
   },
 ];

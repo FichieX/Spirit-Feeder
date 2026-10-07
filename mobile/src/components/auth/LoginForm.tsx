@@ -49,6 +49,7 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const passwordRef = useRef<TextInput>(null);
@@ -203,13 +204,24 @@ export default function LoginForm({ active, onCreateAccount, onForgotPassword, o
               placeholder="Password"
               placeholderTextColor={COLORS.placeholder}
               selectionColor={COLORS.title}
-              secureTextEntry
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
               autoComplete="password"
               textContentType="password"
               returnKeyType="go"
               onSubmitEditing={handleLogin}
               accessibilityLabel="Password"
             />
+            <Pressable
+              onPress={() => setShowPassword((s) => !s)}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+              style={({ pressed }) => [styles.eye, pressed && { opacity: 0.5 }]}
+            >
+              <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={COLORS.placeholder} />
+            </Pressable>
           </View>
         </View>
 
@@ -314,6 +326,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_400Regular',
     fontSize: 16,
     color: COLORS.inputText,
+  },
+  eye: {
+    marginLeft: 8,
+    padding: 2,
   },
   sheet: {
     backgroundColor: COLORS.sheet,

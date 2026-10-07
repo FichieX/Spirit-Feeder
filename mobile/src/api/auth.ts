@@ -1,4 +1,4 @@
-export const API_URL = 'http://172.20.10.2:3000';
+export const API_URL = 'http://192.168.0.101:8000';
 
 export type User = { 
   id: number; 
@@ -14,15 +14,20 @@ export type User = {
 };
 
 async function post(path: string, body: object) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
   } catch {
     throw new Error("Can't reach the server. Check your connection and try again.");
+  } finally {
+    clearTimeout(timer);
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
 import type { PetDef } from '../../pets/catalog';
+import { PreloadSheets } from './Sprite';
 
 const COLS = 4;
 
@@ -52,8 +54,13 @@ export default function PetSprite({ pet, mode, scale = 3.5, onHappyDone }: Props
 
   return (
     <View style={{ width: w, height: h, overflow: 'hidden' }}>
+      {/* keep both idle + happy ready so picking never blinks */}
+      <PreloadSheets sheets={[pet.idle.sheet, pet.happy.sheet]} />
       <Image
         source={anim.sheet}
+        transition={0}
+        cachePolicy="memory"
+        contentFit="fill"
         style={[
           styles.sheet,
           {

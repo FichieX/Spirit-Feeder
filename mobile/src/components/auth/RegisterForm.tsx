@@ -49,22 +49,86 @@ function toDisplayDate(date: Date) {
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+// --- Email checking ---
+// name@domain.com shape: letters/numbers before @, a real-looking domain, and an ending like .com
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
+
+// Common typos, so we can say "Did you mean ...?"
+const TYPO_DOMAINS: Record<string, string> = {
+  'gmial.com': 'gmail.com',
+  'gmai.com': 'gmail.com',
+  'gamil.com': 'gmail.com',
+  'gnail.com': 'gmail.com',
+  'gmail.co': 'gmail.com',
+  'gmail.con': 'gmail.com',
+  'yaho.com': 'yahoo.com',
+  'yahooo.com': 'yahoo.com',
+  'yahoo.con': 'yahoo.com',
+  'hotmial.com': 'hotmail.com',
+  'hotmai.com': 'hotmail.com',
+  'outlok.com': 'outlook.com',
+  'iclod.com': 'icloud.com',
+  'icloud.co': 'icloud.com',
+};
+
+// Throwaway inboxes we don't accept
+const BLOCKED_DOMAINS = [
+  'mailinator.com',
+  'yopmail.com',
+  '10minutemail.com',
+  'guerrillamail.com',
+  'sharklasers.com',
+  'tempmail.com',
+  'temp-mail.org',
+  'trashmail.com',
+  'getnada.com',
+  'dispostable.com',
+];
+
+// Returns an error message, or '' if the email looks good
+function emailProblem(raw: string) {
+  const email = raw.trim().toLowerCase();
+  if (!email) return 'Enter your email address.';
+  if (!EMAIL_RE.test(email) || email.includes('..') || email.length > 254) {
+    return 'Enter a valid email address, like name@gmail.com.';
+  }
+  const [name, domain] = email.split('@');
+  if (TYPO_DOMAINS[domain]) return `Did you mean ${name}@${TYPO_DOMAINS[domain]}?`;
+  if (BLOCKED_DOMAINS.includes(domain)) return "Temporary emails can't be used. Use your real email address.";
+  return '';
+}
+
 type FieldProps = ComponentProps<typeof TextInput> & {
   icon: ComponentProps<typeof Ionicons>['name'];
   inputRef?: Ref<TextInput>;
+  revealable?: boolean; // password box with an eye button
+  invalid?: boolean; // red border when the value is wrong
 };
 
-function Field({ icon, inputRef, ...props }: FieldProps) {
+function Field({ icon, inputRef, revealable, invalid, ...props }: FieldProps) {
+  const [shown, setShown] = useState(false);
   return (
-    <View style={styles.inputRow}>
-      <Ionicons name={icon} size={16} color={COLORS.icon} />
+    <View style={[styles.inputRow, invalid && styles.inputRowError]}>
+      <Ionicons name={icon} size={16} color={invalid ? COLORS.error : COLORS.icon} />
       <TextInput
         ref={inputRef}
         style={styles.input}
         placeholderTextColor={COLORS.placeholder}
         selectionColor={COLORS.strong}
         {...props}
+        secureTextEntry={revealable ? !shown : props.secureTextEntry}
       />
+      {revealable ? (
+        <Pressable
+          onPress={() => setShown((s) => !s)}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={shown ? 'Hide password' : 'Show password'}
+          style={({ pressed }) => [styles.eye, pressed && { opacity: 0.5 }]}
+        >
+          <Ionicons name={shown ? 'eye-off' : 'eye'} size={20} color={COLORS.icon} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -86,6 +150,7 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   const scrollRef = useRef<ScrollView>(null);
   const emailRef = useRef<TextInput>(null);
@@ -117,7 +182,11 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
     setShowPicker(false);
     if (!/^[A-Za-z0-9_]{3,20}$/.test(username.trim()))
       return setError('Use 3 to 20 letters, numbers, or underscores for your username.');
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Enter a valid email address.');
+    const badEmail = emailProblem(email);
+    if (badEmail) {
+      setEmailError(badEmail);
+      return setError(badEmail);
+    }
     if (!birthday) return setError('Choose your birthday.');
     if (password.length < 8) return setError('Use at least 8 characters for your password.');
     if (password !== confirm) return setError("Passwords don't match. Retype them to continue.");
@@ -133,6 +202,7 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
       });
       setUsername('');
       setEmail('');
+      setEmailError('');
       setBirthday(null);
       setPassword('');
       setConfirm('');
@@ -208,7 +278,15 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
               icon="mail-outline"
               placeholder="Email Address"
               value={email}
-              onChangeText={update(setEmail)}
+              invalid={!!emailError}
+              onChangeText={(t) => {
+                setEmail(t);
+                if (error) setError('');
+                if (emailError) setEmailError('');
+              }}
+              onEndEditing={() => {
+                if (email.trim()) setEmailError(emailProblem(email));
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -217,6 +295,11 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
               returnKeyType="next"
               onSubmitEditing={openPicker}
             />
+            {emailError ? (
+              <Text style={styles.fieldError} accessibilityLiveRegion="polite">
+                {emailError}
+              </Text>
+            ) : null}
 
             <Pressable
               style={[styles.inputRow, showPicker && styles.inputRowActive]}
@@ -268,7 +351,9 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
               placeholder="Password"
               value={password}
               onChangeText={update(setPassword)}
-              secureTextEntry
+              revealable
+              autoCapitalize="none"
+              autoCorrect={false}
               autoComplete="new-password"
               textContentType="newPassword"
               returnKeyType="next"
@@ -280,7 +365,9 @@ export default function RegisterForm({ onBack, onHeaderLayout }: Props) {
               placeholder="Retype Password"
               value={confirm}
               onChangeText={update(setConfirm)}
-              secureTextEntry
+              revealable
+              autoCapitalize="none"
+              autoCorrect={false}
               autoComplete="new-password"
               textContentType="newPassword"
               returnKeyType="done"
@@ -407,6 +494,20 @@ const styles = StyleSheet.create({
   },
   inputRowActive: {
     borderColor: COLORS.strong,
+  },
+  inputRowError: {
+    borderColor: COLORS.error,
+  },
+  fieldError: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.error,
+    marginTop: -6,
+    marginLeft: 4,
+  },
+  eye: {
+    marginLeft: 8,
+    padding: 2,
   },
   input: {
     flex: 1,
