@@ -36,6 +36,7 @@ import {
 } from '../pets/forms';
 import DecorMenu from '../components/study/DecorMenu';
 import BibleReader from '../components/study/BibleReader';
+import MemorizeScreen from '../components/study/MemorizeScreen';
 import { DECOR, loadDecor, saveDecor, type DecorKey, type DecorState } from '../decor/items';
 import { loadPowers, savePowers } from '../battle/powerups';
 
@@ -147,6 +148,8 @@ export default function Study() {
   const [readingOpen, setReadingOpen] = useState(false);
   const [reading, setReading] = useState<{ chapter?: number; title: string; content: string } | null>(null);
   const [readingBusy, setReadingBusy] = useState(false);
+  // Verse memorization (earns water + XP)
+  const [memorizeOpen, setMemorizeOpen] = useState(false);
 
   // Test tools (only for test accounts, see TestPanel.tsx)
   const tester = isTester(username);
@@ -846,7 +849,24 @@ export default function Study() {
         onFeed={feed}
         onClose={() => setTrayOpen(false)}
         onRead={openReading}
-        onMemorize={() => Alert.alert('Memorize', 'Memorization is coming soon!')}
+        onMemorize={() => {
+          setTrayOpen(false);
+          // wait for the basket to slide away (iOS can't open a new screen while one is closing)
+          setTimeout(() => setMemorizeOpen(true), 450);
+        }}
+      />
+
+      {/* Verse memorization: +1 water (3 a day) and XP every time */}
+      <MemorizeScreen
+        visible={memorizeOpen}
+        username={username}
+        userId={numericUserId}
+        onClose={() => setMemorizeOpen(false)}
+        onWater={() => setFood((f) => ({ ...f, water: f.water + 1 }))}
+        onXp={(gained) => {
+          setTestXp((x) => (x === null ? x : x + gained)); // test level (test accounts)
+          loadStatus(); // real level + XP from the server
+        }}
       />
 
       {/* Scripture reading: the Bible opens from the cover and flips to John */}
