@@ -87,3 +87,8 @@ export async function fetchNextReading(userId: number) {
 export async function feedPet(userId: number) {
   return await post('/api/pet/feed', { user_id: userId });
 }
+// After the pet dies: the server resets it to a new egg (XP 0, Lv 1, hunger full).
+// Needs POST /api/pet/restart on the backend.
+export async function restartPet(userId: number) {
+  return await post('/api/pet/restart', { user_id: userId });
+}

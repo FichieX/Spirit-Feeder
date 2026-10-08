@@ -6,12 +6,13 @@ const INK = '#1B1612';
 type Props = {
   visible: boolean;
   initial: string;
+  warning?: string; // shown above the box, e.g. "you can only change it once"
   onSave: (name: string) => void;
   onClose: () => void;
 };
 
 // Pop-up to name (or rename) the pet.
-export default function NameModal({ visible, initial, onSave, onClose }: Props) {
+export default function NameModal({ visible, initial, warning, onSave, onClose }: Props) {
   const [name, setName] = useState(initial);
   useEffect(() => {
     if (visible) setName(initial);
@@ -27,7 +28,8 @@ export default function NameModal({ visible, initial, onSave, onClose }: Props) 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
         <View style={styles.panel}>
-          <Text style={styles.title}>NAME YOUR PET</Text>
+          <Text style={styles.title}>{warning ? 'RENAME YOUR PET' : 'NAME YOUR PET'}</Text>
+          {warning ? <Text style={styles.warning}>{warning}</Text> : null}
           <TextInput
             value={name}
             onChangeText={setName}
@@ -77,6 +79,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_500Medium',
     fontSize: 18,
     color: '#E8D9B5',
+  },
+  warning: {
+    fontFamily: 'Montserrat_500Medium',
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#E8D9B5',
+    backgroundColor: '#5A2A22',
+    borderLeftWidth: 3,
+    borderLeftColor: '#E06A4F',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 12,
   },
   count: { fontFamily: 'Montserrat_400Regular', fontSize: 11, color: '#C9B48A', textAlign: 'right', marginTop: 4 },
   button: {

@@ -22,7 +22,7 @@ import ExitModal from '../components/study/ExitModal';
 import FoodTray, { FoodCounts, FoodKind } from '../components/study/FoodTray';
 import TestPanel, { isTester, type TestGroup } from '../components/study/TestPanel';
 import { HungerBar, ProgressBar } from '../components/study/StatBars';
-import { fetchPetStatus, fetchNextReading, feedPet } from '../api/auth';
+import { fetchPetStatus, fetchNextReading, feedPet, restartPet } from '../api/auth';
 import {
   ADULT_LEVEL,
   ADULTS,
@@ -104,6 +104,8 @@ export default function Study() {
   const [mood, setMood] = useState<Mood>('idle');
   const [petName, setPetName] = useState('');
   const [naming, setNaming] = useState(false);
+  // The first name is free. After that the name can be changed ONE more time, then it's permanent.
+  const [renamed, setRenamed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
@@ -183,6 +185,7 @@ export default function Study() {
           xpLoss?: number;
           xpLossLevel?: number;
           testXp?: number | null;
+          renamed?: boolean;
         } = raw ? JSON.parse(raw) : {};
         if (isTester(username) && typeof saved.testXp === 'number') setTestXp(saved.testXp);
         setSerpentBeaten(saved.serpentBeaten ?? []);
@@ -193,6 +196,7 @@ export default function Study() {
         }
         if (saved.stage === 'baby') setStage('baby');
         if (saved.name) setPetName(saved.name);
+        setRenamed(!!saved.renamed);
 
         // Hunger goes down while you're away
         let h = typeof saved.hunger === 'number' ? saved.hunger : 0.7;
@@ -236,10 +240,20 @@ export default function Study() {
         xpLoss: xpLoss.amount,
         xpLossLevel: xpLoss.level,
         testXp,
+        renamed,
         updatedAt: Date.now(),
       }),
     ).catch(() => {});
-  }, [loaded, stage, petName, food, hunger, wineDate, animalId, saveKey, serpentBeaten, xpLoss, testXp]);
+  }, [loaded, stage, petName, food, hunger, wineDate, animalId, saveKey, serpentBeaten, xpLoss, testXp, renamed]);
+
+  // Tapping the name: first name, or the one allowed change, or "it's permanent"
+  const tapName = () => {
+    if (petName && renamed) {
+      Alert.alert('Name is permanent', `${petName}'s name has already been changed once, so it can't be changed again.`);
+      return;
+    }
+    setNaming(true);
+  };
 
   // ---- Serpent ambush: every 5 levels ----
   const [ambush, setAmbush] = useState(false);
@@ -445,7 +459,8 @@ export default function Study() {
         { label: 'Donkey', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(1); } },
         { label: 'Lion', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(2); } },
         // A new egg always hatches into a baby, so these also reset the level to 1
-        { label: 'Back to egg', onPress: () => { setTestOpen(false); setMood('idle'); setPetName(''); setTestXp(1); setStage('egg'); } },
+        { label: 'Back to egg', onPress: () => { setTestOpen(false); setMood('idle'); setPetName(''); setRenamed(false); setTestXp(1); setStage('egg'); } },
+        { label: 'Allow rename again', onPress: () => setRenamed(false) },
         { label: 'Hatch now', onPress: () => { setTestOpen(false); setTestXp(1); setStage('hatching'); } },
       ],
     },
@@ -489,7 +504,7 @@ export default function Study() {
             AsyncStorage.removeItem(saveKey).catch(() => {});
             setTestOpen(false);
             setMood('idle');
-            setPetName('');
+            setPetName(''); setRenamed(false);
             setStage('egg');
             setTestXp(null);
             setSerpentBeaten([]);
@@ -503,12 +518,51 @@ export default function Study() {
   ];
   const testInfo = `${petKey} · ${stage === 'baby' ? form : stage} · hunger ${Math.round(hunger * 100)}% · Lv ${level}${testXp !== null ? ` (test, ${testXp} XP)` : ''} · XP ${Math.round(progress * 100)}% · bread ${food.bread} water ${food.water} wine ${food.wine}`;
 
+  // After dying: start over with a new egg of the same pet. Level, XP, name,
+  // food and beaten serpents all reset, then it hatches into a baby again.
+  const [restarting, setRestarting] = useState(false);
+  const startOver = async () => {
+    if (restarting) return;
+    setRestarting(true);
+    if (numericUserId) {
+      try {
+        await restartPet(numericUserId); // server: XP 0, Lv 1, hunger full
+      } catch (err: any) {
+        console.warn('Restart on server failed:', err?.message);
+      }
+    }
+    setIsDead(false);
+    setMood('idle');
+    setPetName(''); setRenamed(false);
+    setStage('egg');
+    setLevel(1);
+    setProgress(0);
+    setTestXp(tester ? 1 : null);
+    setSerpentBeaten([]);
+    setXpLoss({ amount: 0, level: 0 });
+    setFood(START_FOOD);
+    setHunger(1);
+    setRestarting(false);
+  };
+
   if (isDead) {
     return (
       <View style={[styles.screen, styles.deadContainer]}>
         <Text style={styles.deadTitle}>YOUR PET HAS PASSED AWAY</Text>
         <Text style={styles.deadSub}>It went unfed for over 72 hours.</Text>
-        <Pressable onPress={() => router.replace('/')} style={({ pressed }) => [styles.doneButton, pressed && styles.donePressed]}>
+        <Pressable
+          onPress={startOver}
+          disabled={restarting}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.doneButton, pressed && styles.donePressed]}
+        >
+          <Text style={styles.doneButtonText}>{restarting ? '...' : 'HATCH A NEW EGG'}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.replace('/')}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.doneButton, styles.backButton, pressed && styles.donePressed]}
+        >
           <Text style={styles.doneButtonText}>BACK</Text>
         </Pressable>
         {tester ? (
@@ -558,9 +612,11 @@ export default function Study() {
       {/* Top-left: name + bars */}
       <View style={[styles.hud, { top: insets.top + 24 }]}>
         <Pressable
-          onPress={() => setNaming(true)}
+          onPress={tapName}
           accessibilityRole="button"
-          accessibilityLabel={petName ? `Pet name ${petName}. Tap to rename` : 'Pick a name for your pet'}
+          accessibilityLabel={
+            !petName ? 'Pick a name for your pet' : renamed ? `Pet name ${petName}. Permanent` : `Pet name ${petName}. Tap to rename once`
+          }
           style={({ pressed }) => [styles.nameButton, pressed && styles.nameButtonPressed]}
         >
           <Text style={styles.nameText} numberOfLines={1}>
@@ -745,8 +801,15 @@ export default function Study() {
       <NameModal
         visible={naming}
         initial={petName}
+        warning={
+          petName
+            ? 'You can only change your name once. If you change it now, the new name will be permanent.'
+            : undefined
+        }
         onClose={() => setNaming(false)}
         onSave={(n) => {
+          // Changing an existing name uses up the one allowed change
+          if (petName && n !== petName) setRenamed(true);
           setPetName(n);
           setNaming(false);
         }}
@@ -884,6 +947,7 @@ const styles = StyleSheet.create({
   },
   donePressed: { borderBottomWidth: 3, borderBottomColor: INK, transform: [{ translateY: 4 }] },
   doneButtonText: { fontFamily: 'Silkscreen_700Bold', fontSize: 18, color: INK, letterSpacing: 1 },
+  backButton: { backgroundColor: '#C9B48A', borderBottomColor: '#8C7765', marginTop: 12 },
   reviveButton: { backgroundColor: '#9CC48A', borderBottomColor: '#5F8A4E', marginTop: 12 },
   testButton: {
     position: 'absolute',
