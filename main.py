@@ -596,7 +596,7 @@ def feed_pet(data: FeedPetRequest):
         # 3. Perform Direct SQL Update to prevent ORM caching bugs
         db.query(User).filter(User.id == data.user_id).update(
             {
-                User.current_section_id: next_idx,
+                # reading now moves forward in /api/reading/complete
                 User.last_fed_at: now,
                 User.xp: new_xp,
                 User.animal_level: new_level,
@@ -642,3 +642,36 @@ def restart_pet(data: RestartPetRequest):
         return {"message": "New egg!", "xp": 0, "animal_level": 1, "hunger": 100, "is_dead": False}
     finally:
         db.close()
+
+class ReadingDoneRequest(BaseModel):
+    user_id: int
+
+
+@app.post("/api/reading/complete")
+def complete_reading(data: ReadingDoneRequest):
+    """Player pressed DONE: move to the next passage (back to the first after the last one)."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == data.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+        total = db.query(Section).count()
+        current = user.current_section_id if user.current_section_id and user.current_section_id >= 1 else 1
+        next_idx = 1 if total == 0 or current >= total else current + 1
+        user.current_section_id = next_idx
+        db.commit()
+        return {"message": "Reading complete!", "next_section_id": next_idx}
+    finally:
+        db.close()
+
+# ------------------------------------------------------------------------------
+# FORGOT PASSWORD (6-digit code by email) - see password_reset.py
+# ------------------------------------------------------------------------------
+import password_reset
+password_reset.setup(app, SessionLocal, User, Base, engine)
+
+# ------------------------------------------------------------------------------
+# VERSE MEMORIZATION XP - see memorize.py
+# ------------------------------------------------------------------------------
+import memorize
+memorize.setup(app, SessionLocal, User, get_feeding_xp, level_from_xp, xp_for_level, MAX_XP)
