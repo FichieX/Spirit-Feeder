@@ -83,7 +83,11 @@ export default function TestPanel({ visible, groups, info, onClose }: Props) {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 100,
     elevation: 100,
     backgroundColor: 'rgba(27,22,18,0.55)',

@@ -599,18 +599,6 @@ export default function Study() {
         />
       </View>
 
-      {/* Test tools button (test accounts only) */}
-      {tester ? (
-        <Pressable
-          onPress={() => setTestOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Open test tools"
-          style={({ pressed }) => [styles.testButton, { top: insets.top + 100 }, pressed && { opacity: 0.6 }]}
-        >
-          <Text style={styles.testButtonText}>TEST</Text>
-        </Pressable>
-      ) : null}
-
       {/* "Tap to hatch" bubble, only while it's still an egg */}
       {loaded && stage === 'egg' ? (
         <View style={[styles.bubbleWrap, { bottom: petBottom + 26 * PET_SCALE, left: width / 2 }]} pointerEvents="none">
@@ -780,6 +768,24 @@ export default function Study() {
         </View>
       ) : null}
 
+      {/* Test tools button (test accounts only). Drawn near the end so nothing
+          else (the big grown-up pet, the bars) can sit on top of it and eat the tap. */}
+      {tester && !testOpen ? (
+        <Pressable
+          onPress={() => {
+            console.log('[TEST] button pressed');
+            setTrayOpen(false);
+            setTestOpen(true);
+          }}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Open test tools"
+          style={({ pressed }) => [styles.testButton, { top: insets.top + 100 }, pressed && { opacity: 0.6 }]}
+        >
+          <Text style={styles.testButtonText}>TEST</Text>
+        </Pressable>
+      ) : null}
+
       {/* Test tools: last, so they sit on top of everything */}
       <TestPanel visible={testOpen} groups={testGroups} info={testInfo} onClose={() => setTestOpen(false)} />
     </Animated.View>
@@ -803,7 +809,11 @@ function MenuIcon({ label, source, onPress }: { label: string; source: number; o
 
 const styles = StyleSheet.create({
   ambushBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(120,30,20,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -877,6 +887,8 @@ const styles = StyleSheet.create({
   reviveButton: { backgroundColor: '#9CC48A', borderBottomColor: '#5F8A4E', marginTop: 12 },
   testButton: {
     position: 'absolute',
+    zIndex: 50,
+    elevation: 50,
     right: 18,
     paddingHorizontal: 12,
     height: 34,
