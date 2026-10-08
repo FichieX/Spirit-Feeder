@@ -40,6 +40,23 @@ import { loadPowers, savePowers } from '../battle/powerups';
 // A serpent ambushes the pet every 5 levels (Lv 5, 10, 15 ...)
 const SERPENT_EVERY = 5;
 
+// Same level rules as the server (main.py): level N starts at N^3 total XP, max Lv 100
+const MAX_LEVEL = 100;
+const levelFromXp = (xp: number) => {
+  const x = Math.max(0, Math.floor(xp));
+  let l = Math.max(1, Math.round(Math.cbrt(x)));
+  while (l > 1 && l ** 3 > x) l -= 1;
+  while (l < MAX_LEVEL && (l + 1) ** 3 <= x) l += 1;
+  return Math.min(l, MAX_LEVEL);
+};
+const progressFromXp = (xp: number) => {
+  const l = levelFromXp(xp);
+  return Math.max(0, Math.min(1, (xp - l ** 3) / ((l + 1) ** 3 - l ** 3)));
+};
+// XP for one feeding, same tiers as the server's get_feeding_xp
+const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const feedingXp = (level: number) => (level < 5 ? rand(15, 50) : level < 30 ? rand(50, 150) : level < 60 ? 700 : 1800);
+
 const INK = '#1B1612';
 
 // Food a brand-new pet starts with (so you can test feeding right away)
@@ -100,7 +117,12 @@ export default function Study() {
   const petKey = PET_BY_ANIMAL[animalId] ?? 'donkey';
 
   // Live stats from the server
-  const [level, setLevel] = useState(1);
+  const [serverLevel, setLevel] = useState(1);
+  // Test accounts can set their own XP with the test tools. While set, it is used
+  // instead of the server's, and feeding adds XP to it with the server's rules,
+  // so a test Lv 10 adult grows to Lv 11, 12 ... instead of jumping back.
+  const [testXp, setTestXp] = useState<number | null>(null);
+  const level = testXp !== null ? levelFromXp(testXp) : serverLevel;
 
   // Baby -> teen (young) at TEEN_LEVEL -> adult at ADULT_LEVEL
   const adult = level >= ADULT_LEVEL;
@@ -111,7 +133,8 @@ export default function Study() {
   // Serpent battles: which ones are beaten, and XP lost to the serpent this level
   const [serpentBeaten, setSerpentBeaten] = useState<number[]>([]);
   const [xpLoss, setXpLoss] = useState({ amount: 0, level: 0 });
-  const progress = Math.max(0, serverProgress - (xpLoss.level === level ? xpLoss.amount : 0));
+  const baseProgress = testXp !== null ? progressFromXp(testXp) : serverProgress;
+  const progress = Math.max(0, baseProgress - (xpLoss.level === level ? xpLoss.amount : 0));
   const [isDead, setIsDead] = useState(false);
 
   // Scripture reading screen
@@ -159,7 +182,9 @@ export default function Study() {
           serpentBeaten?: number[];
           xpLoss?: number;
           xpLossLevel?: number;
+          testXp?: number | null;
         } = raw ? JSON.parse(raw) : {};
+        if (isTester(username) && typeof saved.testXp === 'number') setTestXp(saved.testXp);
         setSerpentBeaten(saved.serpentBeaten ?? []);
         setXpLoss({ amount: saved.xpLoss ?? 0, level: saved.xpLossLevel ?? 0 });
         if (!animalParam && saved.animalId) {
@@ -210,10 +235,11 @@ export default function Study() {
         serpentBeaten,
         xpLoss: xpLoss.amount,
         xpLossLevel: xpLoss.level,
+        testXp,
         updatedAt: Date.now(),
       }),
     ).catch(() => {});
-  }, [loaded, stage, petName, food, hunger, wineDate, animalId, saveKey, serpentBeaten, xpLoss]);
+  }, [loaded, stage, petName, food, hunger, wineDate, animalId, saveKey, serpentBeaten, xpLoss, testXp]);
 
   // ---- Serpent ambush: every 5 levels ----
   const [ambush, setAmbush] = useState(false);
@@ -283,6 +309,8 @@ export default function Study() {
   const finishMeal = (kind: FoodKind) => {
     setHunger((h) => Math.min(1, h + FILLS[kind]));
     setMood('idle');
+    // Test level: bread adds XP to it with the same rules as the server
+    if (kind === 'bread') setTestXp((x) => (x === null ? x : x + feedingXp(levelFromXp(x))));
     // Bread counts as a real feeding on the server (hunger + XP)
     if (kind === 'bread' && numericUserId) {
       feedPet(numericUserId)
@@ -417,20 +445,21 @@ export default function Study() {
         { label: 'Donkey', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(1); } },
         { label: 'Lion', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(2); } },
         // A new egg always hatches into a baby, so these also reset the level to 1
-        { label: 'Back to egg', onPress: () => { setTestOpen(false); setMood('idle'); setPetName(''); setLevel(1); setProgress(0); setStage('egg'); } },
-        { label: 'Hatch now', onPress: () => { setTestOpen(false); setLevel(1); setProgress(0); setStage('hatching'); } },
+        { label: 'Back to egg', onPress: () => { setTestOpen(false); setMood('idle'); setPetName(''); setTestXp(1); setStage('egg'); } },
+        { label: 'Hatch now', onPress: () => { setTestOpen(false); setTestXp(1); setStage('hatching'); } },
       ],
     },
     {
       title: 'Level & XP',
       actions: [
-        { label: 'Level +1', onPress: () => setLevel((l) => l + 1) },
-        { label: 'Level 1 (baby)', onPress: () => { setMood('idle'); setLevel(1); } },
-        { label: `Teen (Lv ${TEEN_LEVEL})`, onPress: () => { setStage('baby'); setLevel(TEEN_LEVEL); setMood('tap'); } },
-        { label: `Adult (Lv ${ADULT_LEVEL})`, onPress: () => { setStage('baby'); setLevel(ADULT_LEVEL); setMood('tap'); } },
-        { label: 'XP 0%', onPress: () => { setXpLoss({ amount: 0, level: 0 }); setProgress(0); } },
-        { label: 'XP 50%', onPress: () => setProgress(0.5) },
-        { label: 'XP 95%', onPress: () => setProgress(0.95) },
+        { label: 'Level +1', onPress: () => setTestXp(Math.min(MAX_LEVEL, level + 1) ** 3) },
+        { label: 'Level 1 (baby)', onPress: () => { setMood('idle'); setTestXp(1); } },
+        { label: `Teen (Lv ${TEEN_LEVEL})`, onPress: () => { setStage('baby'); setTestXp(TEEN_LEVEL ** 3); setMood('tap'); } },
+        { label: `Adult (Lv ${ADULT_LEVEL})`, onPress: () => { setStage('baby'); setTestXp(ADULT_LEVEL ** 3); setMood('tap'); } },
+        { label: 'XP 0%', onPress: () => { setXpLoss({ amount: 0, level: 0 }); setTestXp(level ** 3); } },
+        { label: 'XP 50%', onPress: () => setTestXp(Math.floor(level ** 3 + 0.5 * ((level + 1) ** 3 - level ** 3))) },
+        { label: 'XP 95%', onPress: () => setTestXp(Math.floor(level ** 3 + 0.95 * ((level + 1) ** 3 - level ** 3))) },
+        { label: 'Use real server level', onPress: () => setTestXp(null) },
       ],
     },
     {
@@ -462,8 +491,7 @@ export default function Study() {
             setMood('idle');
             setPetName('');
             setStage('egg');
-            setLevel(1);
-            setProgress(0);
+            setTestXp(null);
             setSerpentBeaten([]);
             setXpLoss({ amount: 0, level: 0 });
             setFood(START_FOOD);
@@ -473,7 +501,7 @@ export default function Study() {
       ],
     },
   ];
-  const testInfo = `${petKey} · ${stage === 'baby' ? form : stage} · hunger ${Math.round(hunger * 100)}% · Lv ${level} · XP ${Math.round(progress * 100)}% · bread ${food.bread} water ${food.water} wine ${food.wine}`;
+  const testInfo = `${petKey} · ${stage === 'baby' ? form : stage} · hunger ${Math.round(hunger * 100)}% · Lv ${level}${testXp !== null ? ` (test, ${testXp} XP)` : ''} · XP ${Math.round(progress * 100)}% · bread ${food.bread} water ${food.water} wine ${food.wine}`;
 
   if (isDead) {
     return (
