@@ -4,9 +4,7 @@ import {
   Animated,
   Easing,
   Image,
-  Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -37,6 +35,7 @@ import {
   withNecklace,
 } from '../pets/forms';
 import DecorMenu from '../components/study/DecorMenu';
+import BibleReader from '../components/study/BibleReader';
 import { DECOR, loadDecor, saveDecor, type DecorKey, type DecorState } from '../decor/items';
 import { loadPowers, savePowers } from '../battle/powerups';
 
@@ -833,31 +832,14 @@ export default function Study() {
         onMemorize={() => Alert.alert('Memorize', 'Memorization is coming soon!')}
       />
 
-      {/* Scripture reading screen */}
-      <Modal visible={readingOpen} animationType="slide" onRequestClose={() => setReadingOpen(false)}>
-        <View style={[styles.modalContainer, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
-          <View style={styles.readingHeader}>
-            <Text style={styles.readingSubtitle}>{reading?.chapter ? `John Chapter ${reading.chapter}` : 'John 1'}</Text>
-            <Pressable onPress={() => setReadingOpen(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
-              <Text style={styles.readingClose}>X</Text>
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <Text style={styles.readingTitle}>{reading?.title || 'The Word Became Flesh'}</Text>
-            <Text style={styles.readingText}>
-              {reading?.content || 'In the beginning was the Word, and the Word was with God, and the Word was God...'}
-            </Text>
-          </ScrollView>
-          <Pressable
-            onPress={finishReading}
-            disabled={readingBusy}
-            accessibilityRole="button"
-            style={({ pressed }) => [styles.doneButton, pressed && styles.donePressed]}
-          >
-            <Text style={styles.doneButtonText}>DONE  +1 BREAD</Text>
-          </Pressable>
-        </View>
-      </Modal>
+      {/* Scripture reading: the Bible opens from the cover and flips to John */}
+      <BibleReader
+        visible={readingOpen}
+        reading={reading}
+        busy={readingBusy}
+        onDone={finishReading}
+        onClose={() => setReadingOpen(false)}
+      />
 
       <ExitModal
         visible={leaving}
