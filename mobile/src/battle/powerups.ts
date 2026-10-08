@@ -14,12 +14,14 @@ export const POWERS: { key: PowerKey; name: string; info: string; icon: number }
 ];
 
 // Which power-up each pet usually gets (out of 100). The small ones are the rare pulls.
-//   donkey: Freeze Time is common
-//   lion:   Immunity is common
+//   donkey + raven: Freeze Time is common
+//   lion + camel:   Immunity is common
 //   Eliminate is rare for everyone
 export const POWER_ODDS: Record<string, Record<PowerKey, number>> = {
   donkey: { freeze: 70, shield: 15, fifty: 15 },
   lion: { shield: 70, freeze: 15, fifty: 15 },
+  raven: { freeze: 70, shield: 15, fifty: 15 },
+  camel: { shield: 70, freeze: 15, fifty: 15 },
 };
 const oddsFor = (petKey: string) => POWER_ODDS[petKey] ?? POWER_ODDS.donkey;
 export const isRarePower = (petKey: string, key: PowerKey) => oddsFor(petKey)[key] < 50;
@@ -27,15 +29,34 @@ export const isRarePower = (petKey: string, key: PowerKey) => oddsFor(petKey)[ke
 const EMPTY: PowerBag = { freeze: 0, shield: 0, fifty: 0 };
 const keyFor = (username?: string) => `powers:${username ?? 'guest'}`;
 
-// Accounts that start with power-ups (only until they save their first change)
-const STARTER_POWERS: Record<string, number> = { tester2: 10, tester3: 10 };
+// Power-up gifts for friends testing the game: each kind is topped up to `amount`, once per phone.
+// To give the gift again later, raise `round`.
+//   round 1 = 10 of each (first gift), round 2 = 100 of each
+const GIFTS: Record<string, { amount: number; round: number }> = {
+  tester2: { amount: 100, round: 2 },
+  tester3: { amount: 100, round: 2 },
+};
+const giftKey = (username: string) => `powersGift:${username}`;
 
 export async function loadPowers(username?: string): Promise<PowerBag> {
   try {
     const raw = await AsyncStorage.getItem(keyFor(username));
-    const gift = username ? STARTER_POWERS[username.trim().toLowerCase()] : undefined;
-    if (!raw && gift) return { freeze: gift, shield: gift, fifty: gift };
-    return { ...EMPTY, ...(raw ? JSON.parse(raw) : {}) };
+    let bag: PowerBag = { ...EMPTY, ...(raw ? JSON.parse(raw) : {}) };
+    const gift = username ? GIFTS[username.trim().toLowerCase()] : undefined;
+    if (username && gift) {
+      // Phones that already saved power-ups got the first gift
+      const got = Number(await AsyncStorage.getItem(giftKey(username))) || (raw ? 1 : 0);
+      if (got < gift.round) {
+        bag = {
+          freeze: Math.max(bag.freeze, gift.amount),
+          shield: Math.max(bag.shield, gift.amount),
+          fifty: Math.max(bag.fifty, gift.amount),
+        };
+        await AsyncStorage.setItem(keyFor(username), JSON.stringify(bag));
+        await AsyncStorage.setItem(giftKey(username), String(gift.round));
+      }
+    }
+    return bag;
   } catch {
     return { ...EMPTY };
   }

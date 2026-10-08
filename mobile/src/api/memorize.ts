@@ -1,7 +1,22 @@
 import { API_URL } from './auth';
 
 // Memorizing a verse earns XP on the server (server side: memorize.py)
-export type MemorizeXp = { xp_gained: number; xp: number; animal_level: number; leveled_up: boolean; next_level_xp: number };
+export type MemorizeXp = {
+  xp_gained: number;
+  xp: number;
+  animal_level: number;
+  leveled_up: boolean;
+  next_level_xp: number;
+  today_xp: number; // memorize XP earned today (max daily_limit)
+  daily_limit: number;
+};
+
+// How much memorize XP this player has earned today
+export async function fetchMemorizeToday(userId: number): Promise<{ today_xp: number; daily_limit: number }> {
+  const res = await fetch(`${API_URL}/api/memorize/today/${userId}`);
+  if (!res.ok) throw new Error('Not available.');
+  return res.json();
+}
 
 export async function completeMemorize(userId: number, verse: string, kind: 'new' | 'review' | 'practice'): Promise<MemorizeXp> {
   const controller = new AbortController();

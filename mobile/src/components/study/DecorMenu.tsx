@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DECOR, type DecorItem, type DecorKey, type DecorState } from '../../decor/items';
+import { DECOR, GROWN_UP_ITEM, type DecorItem, type DecorKey, type DecorState } from '../../decor/items';
 
 const INK = '#1B1612';
 const GOLD = '#D9A441';
@@ -13,20 +13,32 @@ type Props = {
   state: DecorState;
   onToggle: (key: DecorKey) => void; // put on / take off, hang up / take down
   onClose: () => void;
-  note?: string; // e.g. "The adult lion always wears his cross"
+  note?: string; // extra line under the clothes
+  petKey: string; // which pet: only its own grown-up outfit is listed
+  grownUp: boolean; // grown-up outfits only fit adults
 };
 
-// Decorate menu: drop-down lists for Clothes and Room (with Frames inside Room).
+// Decorate menu: drop-down lists for Clothes and Room (with Windows and Frames inside Room).
 // A plain layer on top of the study (not an iOS Modal), like the test tools.
-export default function DecorMenu({ visible, state, onToggle, onClose, note }: Props) {
+export default function DecorMenu({ visible, state, onToggle, onClose, note, petKey, grownUp }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const [open, setOpen] = useState<Record<string, boolean>>({ clothes: false, room: false, frames: false });
+  const [open, setOpen] = useState<Record<string, boolean>>({ clothes: false, room: false, windows: false, frames: false });
   if (!visible) return null;
 
-  const flip = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
-  const clothes = DECOR.filter((d) => d.group === 'clothes');
-  const room = DECOR.filter((d) => d.group === 'room' && !d.sub);
+  // Opening one list closes the one next to it, so the menu stays short
+  const SIBLINGS: Record<string, string[]> = { clothes: ['room'], room: ['clothes'], windows: ['frames'], frames: ['windows'] };
+  const flip = (k: string) =>
+    setOpen((o) => {
+      const next = { ...o, [k]: !o[k] };
+      if (next[k]) for (const s of SIBLINGS[k] ?? []) next[s] = false;
+      return next;
+    });
+  const clothes = DECOR.filter((d) => d.group === 'clothes' && (!d.pet || d.pet === petKey));
+  const growUpItem = GROWN_UP_ITEM[petKey];
+  const allRoom = DECOR.filter((d) => d.group === 'room');
+  const room = allRoom.filter((d) => !d.sub);
+  const windows = DECOR.filter((d) => d.sub === 'windows');
   const frames = DECOR.filter((d) => d.sub === 'frames');
   const ownedCount = (items: DecorItem[]) => items.filter((d) => state.owned.includes(d.key)).length;
 
@@ -35,14 +47,29 @@ export default function DecorMenu({ visible, state, onToggle, onClose, note }: P
     const used = state.used.includes(item.key);
     const on = item.group === 'clothes' ? 'WEAR' : 'HANG';
     const off = item.group === 'clothes' ? 'TAKE OFF' : 'TAKE DOWN';
+    const isGrowUp = item.key === growUpItem;
+    const tooYoung = !!item.pet && !grownUp; // outfits only fit grown-ups (the necklace fits everyone)
+    const hint = !owned
+      ? isGrowUp
+        ? item.pet
+          ? `Comes when your ${petKey} grows up`
+          : `Comes when your ${petKey} grows up, or win it in a serpent battle`
+        : 'Win it in a serpent battle'
+      : tooYoung
+        ? `Fits when your ${petKey} is grown up`
+        : isGrowUp
+          ? 'Your grown-up outfit'
+          : '';
     return (
       <View style={[styles.row, { paddingLeft: 10 + indent }]}>
         <Image source={item.icon} style={[styles.icon, !owned && styles.locked]} resizeMode="contain" />
         <View style={{ flex: 1 }}>
           <Text style={[styles.name, !owned && { color: DIM }]}>{item.name}</Text>
-          {!owned ? <Text style={styles.hint}>Win it in a serpent battle</Text> : null}
+          {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         </View>
-        {owned ? (
+        {owned && tooYoung ? (
+          <Text style={styles.lockText}>LATER</Text>
+        ) : owned ? (
           <Pressable
             onPress={() => onToggle(item.key)}
             accessibilityRole="button"
@@ -100,12 +127,21 @@ export default function DecorMenu({ visible, state, onToggle, onClose, note }: P
             </>
           ) : null}
 
-          <Header id="room" title="ROOM" count={ownedCount([...room, ...frames])} total={room.length + frames.length} />
+          <Header id="room" title="ROOM" count={ownedCount(allRoom)} total={allRoom.length} />
           {open.room ? (
             <>
               {room.map((d) => (
                 <Row key={d.key} item={d} />
               ))}
+              <Header id="windows" title="WINDOWS" count={ownedCount(windows)} total={windows.length} indent={14} />
+              {open.windows ? (
+                <>
+                  {windows.map((d) => (
+                    <Row key={d.key} item={d} indent={18} />
+                  ))}
+                  <Text style={[styles.note, { paddingLeft: 28 }]}>One window hangs at a time. Hanging a new one swaps it.</Text>
+                </>
+              ) : null}
               <Header id="frames" title="FRAMES" count={ownedCount(frames)} total={frames.length} indent={14} />
               {open.frames ? frames.map((d) => <Row key={d.key} item={d} indent={18} />) : null}
             </>

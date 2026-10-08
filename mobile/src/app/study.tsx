@@ -16,6 +16,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Sprite, { PreloadSheets } from '../components/pets/Sprite';
 import SpeechBubble from '../components/study/SpeechBubble';
 import NameModal from '../components/study/NameModal';
+import NamesMenu from '../components/study/NamesMenu';
+import UsernameModal from '../components/study/UsernameModal';
+import { changeUsername, fetchAccount } from '../api/account';
+import { moveUserData } from '../storage/moveUserData';
 import ExitModal from '../components/study/ExitModal';
 import FoodTray, { FoodCounts, FoodKind } from '../components/study/FoodTray';
 import TestPanel, { isTester, type TestGroup } from '../components/study/TestPanel';
@@ -32,13 +36,15 @@ import {
   TEEN_LEVEL,
   TEENS,
   type Anim,
-  withNecklace,
+  dressed,
 } from '../pets/forms';
 import DecorMenu from '../components/study/DecorMenu';
 import BibleReader from '../components/study/BibleReader';
 import MemorizeScreen from '../components/study/MemorizeScreen';
-import { DECOR, loadDecor, saveDecor, type DecorKey, type DecorState } from '../decor/items';
+import { DECOR, giveGrownUpItem, loadDecor, outfitOn, saveDecor, toggleUsed, type DecorKey, type DecorState } from '../decor/items';
 import { loadPowers, savePowers } from '../battle/powerups';
+import { setSession } from '../session';
+import { saveTestXp } from '../api/testing';
 
 // A serpent ambushes the pet every 5 levels (Lv 5, 10, 15 ...)
 const SERPENT_EVERY = 5;
@@ -156,19 +162,54 @@ export default function Study() {
   const [testOpen, setTestOpen] = useState(false);
 
   // Decorations won in battles (saved on the phone, per account)
-  const [decor, setDecor] = useState<DecorState>({ owned: [], used: [] });
+  const [decor, setDecor] = useState<DecorState>({ owned: [], used: [], gifted: [] });
+  const [decorLoaded, setDecorLoaded] = useState(false);
   const [decorOpen, setDecorOpen] = useState(false);
   const necklaceOn = decor.used.includes('necklace');
+  // Grown-up outfit (donkey saddle, lion cross, raven pouch, camel robe). Shown until the save loads, so it doesn't flicker.
+  const outfit = decorLoaded ? outfitOn(decor, petKey) : true;
   useEffect(() => {
-    loadDecor(username).then(setDecor);
+    loadDecor(username).then((d) => {
+      setDecor(d);
+      setDecorLoaded(true);
+    });
   }, [username]);
   const updateDecor = (next: DecorState) => {
     setDecor(next);
     saveDecor(username, next);
   };
+  // Grown up: the pet gets its outfit once and puts it on (it can take it off in DECOR)
+  useEffect(() => {
+    if (!decorLoaded || !loaded || stage !== 'baby' || !adult) return;
+    const next = giveGrownUpItem(decor, petKey);
+    if (next) updateDecor(next);
+  }, [decorLoaded, loaded, stage, adult, petKey, decor]);
+  // Tell the rest of the app who's playing (friends pop-up, online status)
+  useEffect(() => {
+    if (!numericUserId) return;
+    setSession({
+      userId: numericUserId,
+      username: username ?? '',
+      animalId,
+      petName,
+      level,
+      hatched: loaded && stage === 'baby' && !isDead,
+    });
+  }, [numericUserId, username, animalId, petName, level, loaded, stage, isDead]);
+
+  // Test accounts: the test level lives on the phone, so also save it on the server.
+  // Then friends, battles and the leaderboard show the same level. (Waits a moment so
+  // tapping "Level +1" five times sends one save, not five.)
+  useEffect(() => {
+    if (!tester || testXp === null || !numericUserId) return;
+    const t = setTimeout(() => {
+      saveTestXp(numericUserId, testXp).catch(() => {});
+    }, 800);
+    return () => clearTimeout(t);
+  }, [tester, testXp, numericUserId]);
+
   const toggleDecor = (key: DecorKey) => {
-    const used = decor.used.includes(key) ? decor.used.filter((k) => k !== key) : [...decor.used, key];
-    updateDecor({ ...decor, used });
+    updateDecor({ ...decor, used: toggleUsed(decor.used, key) });
   };
 
   const loadStatus = async () => {
@@ -270,12 +311,34 @@ export default function Study() {
   }, [loaded, stage, petName, food, hunger, wineDate, animalId, saveKey, serpentBeaten, xpLoss, testXp, renamed]);
 
   // Tapping the name: first name, or the one allowed change, or "it's permanent"
+  // Names: pet name and username, each can be changed once
+  const [namesOpen, setNamesOpen] = useState(false);
+  const [usernameOpen, setUsernameOpen] = useState(false);
+  const [usernameLocked, setUsernameLocked] = useState<boolean | null>(null); // null = unknown (no server)
+  useEffect(() => {
+    if (!numericUserId) return;
+    fetchAccount(numericUserId)
+      .then((a) => setUsernameLocked(!a.canChangeUsername))
+      .catch(() => setUsernameLocked(null));
+  }, [numericUserId]);
+
   const tapName = () => {
-    if (petName && renamed) {
-      Alert.alert('Name is permanent', `${petName}'s name has already been changed once, so it can't be changed again.`);
+    if (!petName) {
+      setNaming(true); // first name for the pet
       return;
     }
-    setNaming(true);
+    setNamesOpen(true);
+  };
+
+  // Username changed on the server: move this phone's saved data to the new name, then reload the study
+  const applyNewUsername = async (newName: string) => {
+    const res = await changeUsername(numericUserId, newName);
+    const oldName = username ?? '';
+    if (oldName) await moveUserData(oldName, res.username);
+    setUsernameOpen(false);
+    setUsernameLocked(true);
+    Alert.alert('Username changed', `You're now ${res.username}. Use it to log in from now on.`);
+    router.replace({ pathname: '/study', params: { username: res.username, userId: userId ?? '', animalId: String(animalId) } });
   };
 
   // ---- Serpent ambush: every 5 levels ----
@@ -473,7 +536,7 @@ export default function Study() {
     {
       title: 'Play animation',
       actions: [
-        { label: petKey === 'lion' ? 'Roar' : 'Love', onPress: () => play('tap') },
+        { label: petKey === 'lion' ? 'Roar' : petKey === 'donkey' ? 'Love' : 'Happy', onPress: () => play('tap') },
         { label: 'Read', onPress: () => play('read') },
         ...(baby.dance ? [{ label: 'Dance', onPress: () => play('dance') }] : []),
         { label: 'Eat bread', onPress: () => play('bread') },
@@ -488,6 +551,8 @@ export default function Study() {
       actions: [
         { label: 'Donkey', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(1); } },
         { label: 'Lion', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(2); } },
+        { label: 'Raven', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(3); } },
+        { label: 'Camel', onPress: () => { setMood('idle'); petChosen.current = true; setAnimalId(4); } },
         // A new egg always hatches into a baby, so these also reset the level to 1
         { label: 'Back to egg', onPress: () => { setTestOpen(false); setMood('idle'); setPetName(''); setRenamed(false); setTestXp(1); setStage('egg'); } },
         { label: 'Allow rename again', onPress: () => setRenamed(false) },
@@ -514,7 +579,7 @@ export default function Study() {
         { label: 'Serpent ambush', onPress: () => { setTestOpen(false); serpentAttacks(milestone); } },
         { label: 'Forget beaten serpents', onPress: () => setSerpentBeaten([]) },
         { label: 'Get all decorations', onPress: () => updateDecor({ ...decor, owned: DECOR.map((d) => d.key) }) },
-        { label: 'Remove all decorations', onPress: () => updateDecor({ owned: [], used: [] }) },
+        { label: 'Remove all decorations', onPress: () => updateDecor({ owned: [], used: [], gifted: [] }) },
         {
           label: '+10 each power-up',
           onPress: async () => {
@@ -599,7 +664,10 @@ export default function Study() {
           <Text style={styles.doneButtonText}>{restarting ? '...' : 'HATCH A NEW EGG'}</Text>
         </Pressable>
         <Pressable
-          onPress={() => router.replace('/')}
+          onPress={() => {
+            setSession(null);
+            router.replace('/');
+          }}
           accessibilityRole="button"
           style={({ pressed }) => [styles.doneButton, styles.backButton, pressed && styles.donePressed]}
         >
@@ -623,7 +691,7 @@ export default function Study() {
 
   return (
     <Animated.View style={[styles.screen, { transform: [{ translateX: ambushShake }] }]}>
-      <PreloadSheets sheets={ALL_SHEETS.map((sh) => withNecklace(sh, necklaceOn))} />
+      <PreloadSheets sheets={ALL_SHEETS.map((sh) => dressed(sh, outfit, necklaceOn))} />
 
       {/* Brick wall, tiled */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -656,8 +724,9 @@ export default function Study() {
         const floorTop = height - floorH;
         const spot: Record<string, { left: number; top: number }> = {
           door: { left: 10, top: floorTop + 4 - h },
-          window: { left: (width - w) / 2, top: insets.top + 175 },
-          frame_jesus: { left: 22, top: insets.top + 190 },
+          // every window sits on the same sill line, centered (taller ones reach higher)
+          window: { left: (width - w) / 2, top: insets.top + 335 - h },
+          frame_jesus: { left: 12, top: insets.top + 182 },
           frame_scripture: { left: width - 22 - w, top: insets.top + 190 },
           cross: { left: width - 66 - w / 2, top: insets.top + 318 },
         };
@@ -666,7 +735,7 @@ export default function Study() {
             key={d.key}
             source={d.icon}
             pointerEvents="none"
-            style={{ position: 'absolute', width: w, height: h, ...spot[d.key] }}
+            style={{ position: 'absolute', width: w, height: h, ...spot[d.slot ?? d.key] }}
           />
         );
       })}
@@ -746,7 +815,7 @@ export default function Study() {
         >
           <Sprite
             key={animKey}
-            sheet={withNecklace(anim.sheet, necklaceOn)}
+            sheet={dressed(anim.sheet, outfit, necklaceOn)}
             ms={anim.ms}
             frameW={frameW}
             frameH={frameH}
@@ -884,6 +953,7 @@ export default function Study() {
         onStay={() => setLeaving(false)}
         onLeave={() => {
           setLeaving(false);
+          setSession(null); // logged out: stop showing as online
           router.replace('/');
         }}
       />
@@ -906,10 +976,40 @@ export default function Study() {
       />
 
       {username ? (
-        <Text style={[styles.owner, { bottom: insets.bottom + 8 }]} accessibilityLabel={`Signed in as ${username}`}>
-          {username}'s study
-        </Text>
+        <Pressable
+          onPress={() => setNamesOpen(true)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Signed in as ${username}. Tap to see names`}
+          style={[styles.ownerWrap, { bottom: insets.bottom + 8 }]}
+        >
+          <Text style={styles.owner}>{username}'s study</Text>
+        </Pressable>
       ) : null}
+
+      <NamesMenu
+        visible={namesOpen}
+        petName={petName || 'No name yet'}
+        petNameLocked={!!petName && renamed}
+        username={username ?? ''}
+        usernameLocked={usernameLocked}
+        onChangePetName={() => {
+          setNamesOpen(false);
+          setNaming(true);
+        }}
+        onChangeUsername={() => {
+          setNamesOpen(false);
+          setUsernameOpen(true);
+        }}
+        onClose={() => setNamesOpen(false)}
+      />
+
+      <UsernameModal
+        visible={usernameOpen}
+        current={username ?? ''}
+        onSubmit={applyNewUsername}
+        onClose={() => setUsernameOpen(false)}
+      />
 
       {/* Serpent ambush warning */}
       {ambush ? (
@@ -945,7 +1045,8 @@ export default function Study() {
         state={decor}
         onToggle={toggleDecor}
         onClose={() => setDecorOpen(false)}
-        note={petKey === 'lion' && form === 'adult' ? 'Your adult lion always wears his cross.' : undefined}
+        petKey={petKey}
+        grownUp={adult}
       />
 
       <TestPanel visible={testOpen} groups={testGroups} info={testInfo} onClose={() => setTestOpen(false)} />
@@ -1066,9 +1167,8 @@ const styles = StyleSheet.create({
   deadContainer: { justifyContent: 'center', alignItems: 'center', padding: 24 },
   deadTitle: { fontFamily: 'Silkscreen_700Bold', fontSize: 22, color: '#E06A4F', textAlign: 'center' },
   deadSub: { fontFamily: 'Montserrat_400Regular', fontSize: 15, color: '#C9B48A', textAlign: 'center', marginTop: 10, marginBottom: 24 },
+  ownerWrap: { position: 'absolute', alignSelf: 'center' },
   owner: {
-    position: 'absolute',
-    alignSelf: 'center',
     fontFamily: 'Montserrat_500Medium',
     fontSize: 12,
     color: '#5A3E2B',

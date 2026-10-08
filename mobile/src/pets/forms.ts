@@ -45,6 +45,18 @@ const BREAD_MS = [260, 200, 200, 200, 200, 200, 450, 650];
 const WATER_MS = [260, 220, 220, 220, 220, 260, 450, 650];
 const WINE_MS = [260, 240, 240, 240, 240, 320, 450, 700];
 
+// Raven + camel timings (all their animations are drawn with the same frame counts)
+const NEW_MS = {
+  idle: [240, 200, 200, 200, 240, 120, 200, 200],
+  tap: [90, 70, 70, 90, 70, 70, 90, 110, 170, 280],
+  hungry: [500, 450, 450, 450, 400, 160, 160, 600],
+  read: [600, 600, 400, 600, 600, 180, 180, 800],
+  bread: [260, 200, 200, 200, 200, 200, 450, 650],
+  water: [260, 220, 220, 220, 220, 260, 450, 650],
+  wine: [260, 240, 240, 240, 240, 320, 450, 700],
+  dance: [180, 180, 180, 180, 180, 180, 180, 180],
+};
+
 export const BABIES: Record<string, BabyAnims> = {
   donkey: {
     frameW: 51,
@@ -82,6 +94,34 @@ export const BABIES: Record<string, BabyAnims> = {
     wine: { sheet: require('../../assets/images/lion_baby_eat_wine.png'), ms: WINE_MS },
     moods: ['read'],
     die: { frameW: 59, frameH: 63, anim: { sheet: require('../../assets/images/lion_baby_die.png'), ms: DIE_MS } },
+  },
+  raven: {
+    frameW: 48,
+    frameH: 63,
+    idle: { sheet: require('../../assets/images/raven_baby_idle.png'), ms: NEW_MS.idle },
+    tap: { sheet: require('../../assets/images/raven_baby_happy.png'), ms: NEW_MS.tap },
+    hungry: { sheet: require('../../assets/images/raven_baby_hungry.png'), ms: NEW_MS.hungry, w: 48, h: 81 },
+    dance: { sheet: require('../../assets/images/raven_baby_dance.png'), ms: NEW_MS.dance },
+    read: { sheet: require('../../assets/images/raven_baby_read.png'), ms: NEW_MS.read },
+    bread: { sheet: require('../../assets/images/raven_baby_eat_bread.png'), ms: NEW_MS.bread },
+    water: { sheet: require('../../assets/images/raven_baby_eat_water.png'), ms: NEW_MS.water },
+    wine: { sheet: require('../../assets/images/raven_baby_eat_wine.png'), ms: NEW_MS.wine },
+    moods: ['dance', 'read'],
+    die: { frameW: 72, frameH: 63, anim: { sheet: require('../../assets/images/raven_baby_die.png'), ms: DIE_MS } },
+  },
+  camel: {
+    frameW: 51,
+    frameH: 66,
+    idle: { sheet: require('../../assets/images/camel_baby_idle.png'), ms: NEW_MS.idle },
+    tap: { sheet: require('../../assets/images/camel_baby_happy.png'), ms: NEW_MS.tap },
+    hungry: { sheet: require('../../assets/images/camel_baby_hungry.png'), ms: NEW_MS.hungry, w: 51, h: 84 },
+    dance: { sheet: require('../../assets/images/camel_baby_dance.png'), ms: NEW_MS.dance },
+    read: { sheet: require('../../assets/images/camel_baby_read.png'), ms: NEW_MS.read },
+    bread: { sheet: require('../../assets/images/camel_baby_eat_bread.png'), ms: NEW_MS.bread },
+    water: { sheet: require('../../assets/images/camel_baby_eat_water.png'), ms: NEW_MS.water },
+    wine: { sheet: require('../../assets/images/camel_baby_eat_wine.png'), ms: NEW_MS.wine },
+    moods: ['dance', 'read'],
+    die: { frameW: 75, frameH: 66, anim: { sheet: require('../../assets/images/camel_baby_die.png'), ms: DIE_MS } },
   },
 };
 
@@ -132,10 +172,37 @@ export const TEENS: Record<string, BabyAnims> = {
     moods: ['read'],
     die: { frameW: 80, frameH: 70, anim: { sheet: require('../../assets/images/lion_die.png'), ms: DIE_MS } },
   },
+  raven: {
+    frameW: 48,
+    frameH: 69,
+    idle: { sheet: require('../../assets/images/raven_idle.png'), ms: NEW_MS.idle },
+    tap: { sheet: require('../../assets/images/raven_happy.png'), ms: NEW_MS.tap },
+    hungry: { sheet: require('../../assets/images/raven_hungry.png'), ms: NEW_MS.hungry, w: 48, h: 87 },
+    read: { sheet: require('../../assets/images/raven_read.png'), ms: NEW_MS.read },
+    bread: { sheet: require('../../assets/images/raven_eat_bread.png'), ms: NEW_MS.bread },
+    water: { sheet: require('../../assets/images/raven_eat_water.png'), ms: NEW_MS.water },
+    wine: { sheet: require('../../assets/images/raven_eat_wine.png'), ms: NEW_MS.wine },
+    moods: ['read'],
+    die: { frameW: 72, frameH: 69, anim: { sheet: require('../../assets/images/raven_die.png'), ms: DIE_MS } },
+  },
+  camel: {
+    frameW: 52,
+    frameH: 72,
+    idle: { sheet: require('../../assets/images/camel_idle.png'), ms: NEW_MS.idle },
+    tap: { sheet: require('../../assets/images/camel_happy.png'), ms: NEW_MS.tap },
+    hungry: { sheet: require('../../assets/images/camel_hungry.png'), ms: NEW_MS.hungry, w: 52, h: 90 },
+    read: { sheet: require('../../assets/images/camel_read.png'), ms: NEW_MS.read },
+    bread: { sheet: require('../../assets/images/camel_eat_bread.png'), ms: NEW_MS.bread },
+    water: { sheet: require('../../assets/images/camel_eat_water.png'), ms: NEW_MS.water },
+    wine: { sheet: require('../../assets/images/camel_eat_wine.png'), ms: NEW_MS.wine },
+    moods: ['read'],
+    die: { frameW: 76, frameH: 72, anim: { sheet: require('../../assets/images/camel_die.png'), ms: DIE_MS } },
+  },
 };
 
 // Adult animations, from ADULT_LEVEL.
-// Donkey: red saddle blanket + bridle. Lion: dark red mane, angry brows, red eyes.
+// Donkey: red saddle blanket + bridle. Lion: dark red mane, angry brows, red eyes, cross.
+// Raven: bread pouch. Camel: wise-men robe. (These grown-up outfits can be taken off: see OUTFIT_PAIRS.)
 const DONKEY_ADULT_HAPPY: Anim = {
   sheet: require('../../assets/images/donkey_adult_happy.png'),
   ms: [90, 70, 70, 90, 70, 70, 90, 110, 170, 280, 190, 190, 190, 190],
@@ -183,6 +250,34 @@ export const ADULTS: Record<string, BabyAnims> = {
     moods: ['read'],
     die: { frameW: 80, frameH: 70, anim: { sheet: require('../../assets/images/lion_adult_die.png'), ms: DIE_MS } },
   },
+  raven: {
+    frameW: 52,
+    frameH: 72,
+    scale: 7,
+    idle: { sheet: require('../../assets/images/raven_adult_idle.png'), ms: NEW_MS.idle },
+    tap: { sheet: require('../../assets/images/raven_adult_happy.png'), ms: NEW_MS.tap },
+    hungry: { sheet: require('../../assets/images/raven_adult_hungry.png'), ms: NEW_MS.hungry, w: 52, h: 90 },
+    read: { sheet: require('../../assets/images/raven_adult_read.png'), ms: NEW_MS.read },
+    bread: { sheet: require('../../assets/images/raven_adult_eat_bread.png'), ms: NEW_MS.bread },
+    water: { sheet: require('../../assets/images/raven_adult_eat_water.png'), ms: NEW_MS.water },
+    wine: { sheet: require('../../assets/images/raven_adult_eat_wine.png'), ms: NEW_MS.wine },
+    moods: ['read'],
+    die: { frameW: 76, frameH: 72, anim: { sheet: require('../../assets/images/raven_adult_die.png'), ms: DIE_MS } },
+  },
+  camel: {
+    frameW: 56,
+    frameH: 76,
+    scale: 6,
+    idle: { sheet: require('../../assets/images/camel_adult_idle.png'), ms: NEW_MS.idle },
+    tap: { sheet: require('../../assets/images/camel_adult_happy.png'), ms: NEW_MS.tap },
+    hungry: { sheet: require('../../assets/images/camel_adult_hungry.png'), ms: NEW_MS.hungry, w: 56, h: 94 },
+    read: { sheet: require('../../assets/images/camel_adult_read.png'), ms: NEW_MS.read },
+    bread: { sheet: require('../../assets/images/camel_adult_eat_bread.png'), ms: NEW_MS.bread },
+    water: { sheet: require('../../assets/images/camel_adult_eat_water.png'), ms: NEW_MS.water },
+    wine: { sheet: require('../../assets/images/camel_adult_eat_wine.png'), ms: NEW_MS.wine },
+    moods: ['read'],
+    die: { frameW: 80, frameH: 76, anim: { sheet: require('../../assets/images/camel_adult_die.png'), ms: DIE_MS } },
+  },
 };
 
 // Every sheet the study can show, loaded ahead of time so nothing blinks
@@ -197,7 +292,7 @@ export const ALL_SHEETS = [
 ];
 
 // animal_id from the server -> which baby
-export const PET_BY_ANIMAL: Record<number, string> = { 1: 'donkey', 2: 'lion' };
+export const PET_BY_ANIMAL: Record<number, string> = { 1: 'donkey', 2: 'lion', 3: 'raven', 4: 'camel' };
 
 export type Form = 'baby' | 'teen' | 'adult';
 
@@ -214,7 +309,7 @@ export function animsFor(petKey: string, level: number): BabyAnims {
 }
 
 // The same animations with the cross necklace drawn on, used when the pet wears it.
-// (The adult lion always wears his, so he isn't in this list.)
+// (The adult lion's normal sheets already have his cross; his plain sheets map to them.)
 const NECKLACE_PAIRS: [number, number][] = [
   [require('../../assets/images/baby_idle.png'), require('../../assets/images/baby_idle_cross.png')],
   [require('../../assets/images/baby_love.png'), require('../../assets/images/baby_love_cross.png')],
@@ -257,8 +352,127 @@ const NECKLACE_PAIRS: [number, number][] = [
   [require('../../assets/images/lion_eat_water.png'), require('../../assets/images/lion_eat_water_cross.png')],
   [require('../../assets/images/lion_eat_wine.png'), require('../../assets/images/lion_eat_wine_cross.png')],
   [require('../../assets/images/lion_die.png'), require('../../assets/images/lion_die_cross.png')],
+  [require('../../assets/images/raven_baby_idle.png'), require('../../assets/images/raven_baby_idle_cross.png')],
+  [require('../../assets/images/raven_baby_happy.png'), require('../../assets/images/raven_baby_happy_cross.png')],
+  [require('../../assets/images/raven_baby_hungry.png'), require('../../assets/images/raven_baby_hungry_cross.png')],
+  [require('../../assets/images/raven_baby_read.png'), require('../../assets/images/raven_baby_read_cross.png')],
+  [require('../../assets/images/raven_baby_eat_bread.png'), require('../../assets/images/raven_baby_eat_bread_cross.png')],
+  [require('../../assets/images/raven_baby_eat_water.png'), require('../../assets/images/raven_baby_eat_water_cross.png')],
+  [require('../../assets/images/raven_baby_eat_wine.png'), require('../../assets/images/raven_baby_eat_wine_cross.png')],
+  [require('../../assets/images/raven_baby_die.png'), require('../../assets/images/raven_baby_die_cross.png')],
+  [require('../../assets/images/raven_baby_dance.png'), require('../../assets/images/raven_baby_dance_cross.png')],
+  [require('../../assets/images/raven_idle.png'), require('../../assets/images/raven_idle_cross.png')],
+  [require('../../assets/images/raven_happy.png'), require('../../assets/images/raven_happy_cross.png')],
+  [require('../../assets/images/raven_hungry.png'), require('../../assets/images/raven_hungry_cross.png')],
+  [require('../../assets/images/raven_read.png'), require('../../assets/images/raven_read_cross.png')],
+  [require('../../assets/images/raven_eat_bread.png'), require('../../assets/images/raven_eat_bread_cross.png')],
+  [require('../../assets/images/raven_eat_water.png'), require('../../assets/images/raven_eat_water_cross.png')],
+  [require('../../assets/images/raven_eat_wine.png'), require('../../assets/images/raven_eat_wine_cross.png')],
+  [require('../../assets/images/raven_die.png'), require('../../assets/images/raven_die_cross.png')],
+  [require('../../assets/images/raven_adult_idle.png'), require('../../assets/images/raven_adult_idle_cross.png')],
+  [require('../../assets/images/raven_adult_idle_plain.png'), require('../../assets/images/raven_adult_idle_plain_cross.png')],
+  [require('../../assets/images/raven_adult_happy.png'), require('../../assets/images/raven_adult_happy_cross.png')],
+  [require('../../assets/images/raven_adult_happy_plain.png'), require('../../assets/images/raven_adult_happy_plain_cross.png')],
+  [require('../../assets/images/raven_adult_hungry.png'), require('../../assets/images/raven_adult_hungry_cross.png')],
+  [require('../../assets/images/raven_adult_hungry_plain.png'), require('../../assets/images/raven_adult_hungry_plain_cross.png')],
+  [require('../../assets/images/raven_adult_read.png'), require('../../assets/images/raven_adult_read_cross.png')],
+  [require('../../assets/images/raven_adult_read_plain.png'), require('../../assets/images/raven_adult_read_plain_cross.png')],
+  [require('../../assets/images/raven_adult_eat_bread.png'), require('../../assets/images/raven_adult_eat_bread_cross.png')],
+  [require('../../assets/images/raven_adult_eat_bread_plain.png'), require('../../assets/images/raven_adult_eat_bread_plain_cross.png')],
+  [require('../../assets/images/raven_adult_eat_water.png'), require('../../assets/images/raven_adult_eat_water_cross.png')],
+  [require('../../assets/images/raven_adult_eat_water_plain.png'), require('../../assets/images/raven_adult_eat_water_plain_cross.png')],
+  [require('../../assets/images/raven_adult_eat_wine.png'), require('../../assets/images/raven_adult_eat_wine_cross.png')],
+  [require('../../assets/images/raven_adult_eat_wine_plain.png'), require('../../assets/images/raven_adult_eat_wine_plain_cross.png')],
+  [require('../../assets/images/raven_adult_die.png'), require('../../assets/images/raven_adult_die_cross.png')],
+  [require('../../assets/images/raven_adult_die_plain.png'), require('../../assets/images/raven_adult_die_plain_cross.png')],
+  [require('../../assets/images/camel_baby_idle.png'), require('../../assets/images/camel_baby_idle_cross.png')],
+  [require('../../assets/images/camel_baby_happy.png'), require('../../assets/images/camel_baby_happy_cross.png')],
+  [require('../../assets/images/camel_baby_hungry.png'), require('../../assets/images/camel_baby_hungry_cross.png')],
+  [require('../../assets/images/camel_baby_read.png'), require('../../assets/images/camel_baby_read_cross.png')],
+  [require('../../assets/images/camel_baby_eat_bread.png'), require('../../assets/images/camel_baby_eat_bread_cross.png')],
+  [require('../../assets/images/camel_baby_eat_water.png'), require('../../assets/images/camel_baby_eat_water_cross.png')],
+  [require('../../assets/images/camel_baby_eat_wine.png'), require('../../assets/images/camel_baby_eat_wine_cross.png')],
+  [require('../../assets/images/camel_baby_die.png'), require('../../assets/images/camel_baby_die_cross.png')],
+  [require('../../assets/images/camel_baby_dance.png'), require('../../assets/images/camel_baby_dance_cross.png')],
+  [require('../../assets/images/camel_idle.png'), require('../../assets/images/camel_idle_cross.png')],
+  [require('../../assets/images/camel_happy.png'), require('../../assets/images/camel_happy_cross.png')],
+  [require('../../assets/images/camel_hungry.png'), require('../../assets/images/camel_hungry_cross.png')],
+  [require('../../assets/images/camel_read.png'), require('../../assets/images/camel_read_cross.png')],
+  [require('../../assets/images/camel_eat_bread.png'), require('../../assets/images/camel_eat_bread_cross.png')],
+  [require('../../assets/images/camel_eat_water.png'), require('../../assets/images/camel_eat_water_cross.png')],
+  [require('../../assets/images/camel_eat_wine.png'), require('../../assets/images/camel_eat_wine_cross.png')],
+  [require('../../assets/images/camel_die.png'), require('../../assets/images/camel_die_cross.png')],
+  [require('../../assets/images/camel_adult_idle.png'), require('../../assets/images/camel_adult_idle_cross.png')],
+  [require('../../assets/images/camel_adult_idle_plain.png'), require('../../assets/images/camel_adult_idle_plain_cross.png')],
+  [require('../../assets/images/camel_adult_happy.png'), require('../../assets/images/camel_adult_happy_cross.png')],
+  [require('../../assets/images/camel_adult_happy_plain.png'), require('../../assets/images/camel_adult_happy_plain_cross.png')],
+  [require('../../assets/images/camel_adult_hungry.png'), require('../../assets/images/camel_adult_hungry_cross.png')],
+  [require('../../assets/images/camel_adult_hungry_plain.png'), require('../../assets/images/camel_adult_hungry_plain_cross.png')],
+  [require('../../assets/images/camel_adult_read.png'), require('../../assets/images/camel_adult_read_cross.png')],
+  [require('../../assets/images/camel_adult_read_plain.png'), require('../../assets/images/camel_adult_read_plain_cross.png')],
+  [require('../../assets/images/camel_adult_eat_bread.png'), require('../../assets/images/camel_adult_eat_bread_cross.png')],
+  [require('../../assets/images/camel_adult_eat_bread_plain.png'), require('../../assets/images/camel_adult_eat_bread_plain_cross.png')],
+  [require('../../assets/images/camel_adult_eat_water.png'), require('../../assets/images/camel_adult_eat_water_cross.png')],
+  [require('../../assets/images/camel_adult_eat_water_plain.png'), require('../../assets/images/camel_adult_eat_water_plain_cross.png')],
+  [require('../../assets/images/camel_adult_eat_wine.png'), require('../../assets/images/camel_adult_eat_wine_cross.png')],
+  [require('../../assets/images/camel_adult_eat_wine_plain.png'), require('../../assets/images/camel_adult_eat_wine_plain_cross.png')],
+  [require('../../assets/images/camel_adult_die.png'), require('../../assets/images/camel_adult_die_cross.png')],
+  [require('../../assets/images/camel_adult_die_plain.png'), require('../../assets/images/camel_adult_die_plain_cross.png')],
+  [require('../../assets/images/lion_adult_idle_plain.png'), require('../../assets/images/lion_adult_idle.png')],
+  [require('../../assets/images/lion_adult_happy_plain.png'), require('../../assets/images/lion_adult_happy.png')],
+  [require('../../assets/images/lion_adult_hungry_plain.png'), require('../../assets/images/lion_adult_hungry.png')],
+  [require('../../assets/images/lion_adult_read_plain.png'), require('../../assets/images/lion_adult_read.png')],
+  [require('../../assets/images/lion_adult_eat_bread_plain.png'), require('../../assets/images/lion_adult_eat_bread.png')],
+  [require('../../assets/images/lion_adult_eat_water_plain.png'), require('../../assets/images/lion_adult_eat_water.png')],
+  [require('../../assets/images/lion_adult_eat_wine_plain.png'), require('../../assets/images/lion_adult_eat_wine.png')],
+  [require('../../assets/images/lion_adult_die_plain.png'), require('../../assets/images/lion_adult_die.png')],
 ];
 const NECKLACE_SHEETS = new Map<number, number>(NECKLACE_PAIRS);
 
 // Swap a sheet for its necklace version when the necklace is on
 export const withNecklace = (sheet: number, on: boolean) => (on ? (NECKLACE_SHEETS.get(sheet) ?? sheet) : sheet);
+
+// Grown-up outfits (donkey saddle blanket, lion cross, raven bread pouch, camel robe).
+// The ADULTS sheets are drawn wearing it; taking it off swaps to these plain sheets.
+// (The plain adult donkey is the young donkey's art, drawn bigger.)
+const OUTFIT_PAIRS: [number, number][] = [
+  [require('../../assets/images/donkey_adult_idle.png'), require('../../assets/images/donkey_idle.png')],
+  [require('../../assets/images/donkey_adult_happy.png'), require('../../assets/images/donkey_happy.png')],
+  [require('../../assets/images/donkey_adult_hungry.png'), require('../../assets/images/donkey_hungry.png')],
+  [require('../../assets/images/donkey_adult_read.png'), require('../../assets/images/donkey_read.png')],
+  [require('../../assets/images/donkey_adult_eat_bread.png'), require('../../assets/images/donkey_eat_bread.png')],
+  [require('../../assets/images/donkey_adult_eat_water.png'), require('../../assets/images/donkey_eat_water.png')],
+  [require('../../assets/images/donkey_adult_eat_wine.png'), require('../../assets/images/donkey_eat_wine.png')],
+  [require('../../assets/images/donkey_adult_die.png'), require('../../assets/images/donkey_die.png')],
+  [require('../../assets/images/lion_adult_idle.png'), require('../../assets/images/lion_adult_idle_plain.png')],
+  [require('../../assets/images/lion_adult_happy.png'), require('../../assets/images/lion_adult_happy_plain.png')],
+  [require('../../assets/images/lion_adult_hungry.png'), require('../../assets/images/lion_adult_hungry_plain.png')],
+  [require('../../assets/images/lion_adult_read.png'), require('../../assets/images/lion_adult_read_plain.png')],
+  [require('../../assets/images/lion_adult_eat_bread.png'), require('../../assets/images/lion_adult_eat_bread_plain.png')],
+  [require('../../assets/images/lion_adult_eat_water.png'), require('../../assets/images/lion_adult_eat_water_plain.png')],
+  [require('../../assets/images/lion_adult_eat_wine.png'), require('../../assets/images/lion_adult_eat_wine_plain.png')],
+  [require('../../assets/images/lion_adult_die.png'), require('../../assets/images/lion_adult_die_plain.png')],
+  [require('../../assets/images/raven_adult_idle.png'), require('../../assets/images/raven_adult_idle_plain.png')],
+  [require('../../assets/images/raven_adult_happy.png'), require('../../assets/images/raven_adult_happy_plain.png')],
+  [require('../../assets/images/raven_adult_hungry.png'), require('../../assets/images/raven_adult_hungry_plain.png')],
+  [require('../../assets/images/raven_adult_read.png'), require('../../assets/images/raven_adult_read_plain.png')],
+  [require('../../assets/images/raven_adult_eat_bread.png'), require('../../assets/images/raven_adult_eat_bread_plain.png')],
+  [require('../../assets/images/raven_adult_eat_water.png'), require('../../assets/images/raven_adult_eat_water_plain.png')],
+  [require('../../assets/images/raven_adult_eat_wine.png'), require('../../assets/images/raven_adult_eat_wine_plain.png')],
+  [require('../../assets/images/raven_adult_die.png'), require('../../assets/images/raven_adult_die_plain.png')],
+  [require('../../assets/images/camel_adult_idle.png'), require('../../assets/images/camel_adult_idle_plain.png')],
+  [require('../../assets/images/camel_adult_happy.png'), require('../../assets/images/camel_adult_happy_plain.png')],
+  [require('../../assets/images/camel_adult_hungry.png'), require('../../assets/images/camel_adult_hungry_plain.png')],
+  [require('../../assets/images/camel_adult_read.png'), require('../../assets/images/camel_adult_read_plain.png')],
+  [require('../../assets/images/camel_adult_eat_bread.png'), require('../../assets/images/camel_adult_eat_bread_plain.png')],
+  [require('../../assets/images/camel_adult_eat_water.png'), require('../../assets/images/camel_adult_eat_water_plain.png')],
+  [require('../../assets/images/camel_adult_eat_wine.png'), require('../../assets/images/camel_adult_eat_wine_plain.png')],
+  [require('../../assets/images/camel_adult_die.png'), require('../../assets/images/camel_adult_die_plain.png')],
+];
+const OUTFIT_OFF = new Map<number, number>(OUTFIT_PAIRS);
+
+// The sheet to show: grown-up outfit on or off, then the necklace on or off
+export function dressed(sheet: number, outfitOn: boolean, necklaceOn: boolean) {
+  const s = outfitOn ? sheet : (OUTFIT_OFF.get(sheet) ?? sheet);
+  return withNecklace(s, necklaceOn);
+}

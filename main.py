@@ -287,6 +287,8 @@ def seed_database():
             default_animals = [
                 Animal(animal_id=1, species="Donkey", baby_name="Foal", young_name="Colt", adult_name="Donkey"),
                 Animal(animal_id=2, species="Lion", baby_name="Cub", young_name="Young Lion", adult_name="Lion"),
+                Animal(animal_id=3, species="Raven", baby_name="Chick", young_name="Fledgling", adult_name="Raven"),
+                Animal(animal_id=4, species="Camel", baby_name="Calf", young_name="Young Camel", adult_name="Camel"),
             ]
             db.add_all(default_animals)
             db.commit()
@@ -674,4 +676,34 @@ password_reset.setup(app, SessionLocal, User, Base, engine)
 # VERSE MEMORIZATION XP - see memorize.py
 # ------------------------------------------------------------------------------
 import memorize
-memorize.setup(app, SessionLocal, User, get_feeding_xp, level_from_xp, xp_for_level, MAX_XP)
+memorize.setup(app, SessionLocal, User, Base, engine, get_feeding_xp, level_from_xp, xp_for_level, MAX_XP)
+
+# ------------------------------------------------------------------------------
+# SERPENT BATTLE XP (win = quiz XP once per serpent, lose = 30% of the level bar)
+# ------------------------------------------------------------------------------
+import serpent
+serpent.setup(app, SessionLocal, User, Base, engine, get_quiz_xp_reward, level_from_xp, xp_for_level, MAX_XP)
+
+# ------------------------------------------------------------------------------
+# LIVE RANKED BATTLES (player vs player) - see pvp.py
+# ------------------------------------------------------------------------------
+import pvp
+pvp.setup(app, SessionLocal, User, Base, engine, level_from_xp)
+
+# ------------------------------------------------------------------------------
+# FRIENDS (requests, online list, live friend battles) - see friends.py
+# ------------------------------------------------------------------------------
+import friends
+friends.setup(app, SessionLocal, User, Base, engine, level_from_xp)
+
+# ------------------------------------------------------------------------------
+# TEST ACCOUNTS (tester/test/admin): save the test level on the server - see testing.py
+# ------------------------------------------------------------------------------
+import testing
+testing.setup(app, SessionLocal, User, level_from_xp, MAX_XP)
+
+# ------------------------------------------------------------------------------
+# CHANGE USERNAME (once per account) - see account.py
+# ------------------------------------------------------------------------------
+import account
+account.setup(app, SessionLocal, User, Base, engine)

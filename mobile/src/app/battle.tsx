@@ -4,12 +4,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Sprite, { PreloadSheets } from '../components/pets/Sprite';
-import { PET_BY_ANIMAL, PET_SCALE, animsFor, withNecklace, type Anim } from '../pets/forms';
+import { PET_BY_ANIMAL, PET_SCALE, animsFor, dressed, type Anim } from '../pets/forms';
 import { pickQuestions, choicesFor, loadSeen, markSeen, type Question } from '../battle/questions';
 import { POWERS, isRarePower, loadPowers, savePowers, type PowerBag, type PowerKey } from '../battle/powerups';
 import { rollReward, type Reward } from '../battle/rewards';
-import { decorItem, loadDecor, saveDecor, type DecorState } from '../decor/items';
+import { decorItem, loadDecor, outfitOn, saveDecor, type DecorState } from '../decor/items';
 import { VICTORY_VERSES, COMFORT_VERSES, pickVerse, type Verse } from '../battle/verses';
+import { reportSerpent, type SerpentXp } from '../api/serpent';
 
 // ---------- Settings ----------
 const HEARTS = 3; // hearts for each side
@@ -121,6 +122,7 @@ export default function Battle() {
   // Decorations: what the player owns (for rewards) and whether the pet wears the necklace
   const [decor, setDecor] = useState<DecorState>({ owned: [], used: [] });
   const necklaceOn = decor.used.includes('necklace');
+  const outfit = outfitOn(decor, petKey); // grown-up outfit
   const [verse, setVerse] = useState<Verse | null>(null);
 
   // ---------- Motion ----------
@@ -301,9 +303,20 @@ export default function Battle() {
     if (key === 'fifty') setHidden(question.wrong[Math.floor(Math.random() * 2)]);
   };
 
-  // ---------- Save the result on the phone ----------
-  // (When the backend has a battle endpoint, call it here too.)
+  // ---------- Save the result: on the server (XP) and on the phone ----------
+  const [xpResult, setXpResult] = useState<SerpentXp | null>(null);
   const saveResult = async (won: boolean) => {
+    // Server: winning gives XP (first time per serpent), losing takes 30% of the level's XP bar
+    let server: SerpentXp | null = null;
+    const id = Number(userId) || 0;
+    if (id) {
+      try {
+        server = await reportSerpent(id, milestone, won);
+        setXpResult(server);
+      } catch {
+        server = null; // server not reachable or not set up: fall back to the phone-only XP loss
+      }
+    }
     const key = `pet:${username ?? 'guest'}`;
     try {
       const raw = await AsyncStorage.getItem(key);
@@ -312,8 +325,8 @@ export default function Battle() {
         const beaten: number[] = save.serpentBeaten ?? [];
         if (!beaten.includes(milestone)) beaten.push(milestone);
         save.serpentBeaten = beaten;
-      } else {
-        // Lose XP: remembered for this level only
+      } else if (!server) {
+        // Lose XP (phone only, when the server couldn't save it): remembered for this level only
         const sameLevel = save.xpLossLevel === level;
         save.xpLoss = Math.min(1, (sameLevel ? save.xpLoss ?? 0 : 0) + XP_LOSS);
         save.xpLossLevel = level;
@@ -346,7 +359,7 @@ export default function Battle() {
   return (
     <View style={styles.screen}>
       <PreloadSheets
-        sheets={[...Object.values(SERPENT).map((a) => a.sheet), ...[anims.idle.sheet, anims.tap.sheet, ...(anims.die ? [anims.die.anim.sheet] : [])].map((sh) => withNecklace(sh, necklaceOn))]}
+        sheets={[...Object.values(SERPENT).map((a) => a.sheet), ...[anims.idle.sheet, anims.tap.sheet, ...(anims.die ? [anims.die.anim.sheet] : [])].map((sh) => dressed(sh, outfit, necklaceOn))]}
       />
       <Animated.View style={{ flex: 1, transform: [{ translateX: shake }] }}>
         {/* ---------- Arena ---------- */}
@@ -387,7 +400,7 @@ export default function Battle() {
           >
             <Sprite
               key={`${petKey}-${petMove}`}
-              sheet={withNecklace(petAnim.sheet, necklaceOn)}
+              sheet={dressed(petAnim.sheet, outfit, necklaceOn)}
               ms={petAnim.ms}
               frameW={petFrameW}
               frameH={petFrameH}
@@ -535,13 +548,23 @@ export default function Battle() {
                 })()
               : null}
 
+            {phase === 'won' && xpResult ? (
+              xpResult.xp_change > 0 ? (
+                <Text style={styles.xpWin}>{`+${xpResult.xp_change} XP${xpResult.leveled_up ? `  ·  LEVEL UP! Lv ${xpResult.animal_level}` : ''}`}</Text>
+              ) : xpResult.note ? (
+                <Text style={styles.xpNote}>{xpResult.note}</Text>
+              ) : null
+            ) : null}
+
             {phase === 'won' && reward?.kind === 'none' ? (
               <Text style={styles.lossText}>The serpent left nothing behind this time. Stronger serpents give rarer rewards!</Text>
             ) : null}
 
             {phase === 'lost' ? (
               <Text style={styles.lossText}>
-                {petName} lost {Math.round(XP_LOSS * 100)}% XP. The serpent will return — read and try again!
+                {xpResult
+                  ? `${petName} lost ${Math.abs(xpResult.xp_change)} XP. The serpent will return — read and try again!`
+                  : `${petName} lost ${Math.round(XP_LOSS * 100)}% XP. The serpent will return — read and try again!`}
               </Text>
             ) : null}
 
@@ -651,6 +674,8 @@ const styles = StyleSheet.create({
   rareTag: { fontFamily: 'Silkscreen_700Bold', fontSize: 12, color: '#F2D27A', letterSpacing: 1, marginBottom: 2 },
   rewardName: { fontFamily: 'Silkscreen_700Bold', fontSize: 15, color: GOLD },
   rewardInfo: { fontFamily: 'Montserrat_500Medium', fontSize: 13, color: PARCHMENT, marginTop: 2 },
+  xpWin: { fontFamily: 'Silkscreen_700Bold', fontSize: 18, color: GOLD, textAlign: 'center', marginBottom: 12 },
+  xpNote: { fontFamily: 'Montserrat_500Medium', fontSize: 13, color: DIM, textAlign: 'center', marginBottom: 12 },
   lossText: { fontFamily: 'Montserrat_500Medium', fontSize: 14, color: PARCHMENT, textAlign: 'center', marginBottom: 14 },
   verseBox: { borderLeftWidth: 3, borderLeftColor: GOLD, paddingLeft: 12, marginBottom: 18 },
   verseText: { fontFamily: 'Montserrat_400Regular', fontStyle: 'italic', fontSize: 15, lineHeight: 22, color: PARCHMENT },

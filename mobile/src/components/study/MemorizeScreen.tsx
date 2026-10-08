@@ -23,7 +23,7 @@ import {
   type Token,
   type Verse,
 } from '../../memorize/verses';
-import { completeMemorize } from '../../api/memorize';
+import { completeMemorize, fetchMemorizeToday } from '../../api/memorize';
 
 // ---------- Colors ----------
 const BG = '#2B211B';
@@ -63,7 +63,7 @@ type Session = {
   mistakes: number;
 };
 
-type Result = { kind: Kind; water: boolean; waterFull: boolean; xp: number | null; xpError: string; leveledUp: boolean; mistakes: number; nextDays: number | null };
+type Result = { kind: Kind; water: boolean; waterFull: boolean; xp: number | null; xpError: string; leveledUp: boolean; mistakes: number; nextDays: number | null; xpFull: boolean };
 
 // Verse memorization: review due verses, learn the next new one, or practice for XP
 export default function MemorizeScreen({ visible, username, userId, onClose, onWater, onXp }: Props) {
@@ -72,6 +72,8 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
   const [session, setSession] = useState<Session | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
+  // Memorize XP today (the server allows about one level of XP a day)
+  const [xpToday, setXpToday] = useState<{ today: number; limit: number } | null>(null);
   const shake = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -79,6 +81,11 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
     setSession(null);
     setResult(null);
     loadMemory(username).then(setMem);
+    if (userId) {
+      fetchMemorizeToday(userId)
+        .then((r) => setXpToday({ today: r.today_xp, limit: r.daily_limit }))
+        .catch(() => setXpToday(null));
+    }
   }, [visible, username]);
 
   const due = useMemo(() => (mem ? dueVerses(mem) : []), [mem]);
@@ -156,17 +163,20 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
     let xp: number | null = null;
     let xpError = '';
     let leveledUp = false;
+    let xpFull = false;
     if (userId) {
       try {
         const r = await completeMemorize(userId, s.verse.ref, s.kind);
         xp = r.xp_gained;
         leveledUp = r.leveled_up;
-        onXp(r.xp_gained);
+        xpFull = r.today_xp >= r.daily_limit;
+        setXpToday({ today: r.today_xp, limit: r.daily_limit });
+        if (r.xp_gained > 0) onXp(r.xp_gained);
       } catch (err: any) {
         xpError = err?.message || 'No XP this time.';
       }
     }
-    setResult({ kind: s.kind, water, waterFull: s.kind !== 'practice' && !water, xp, xpError, leveledUp, mistakes: s.mistakes, nextDays });
+    setResult({ kind: s.kind, water, waterFull: s.kind !== 'practice' && !water, xp, xpError, leveledUp, mistakes: s.mistakes, nextDays, xpFull });
     setBusy(false);
   };
 
@@ -237,6 +247,19 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
           {waterLeft > 0 ? `${waterLeft} water left to earn today` : 'All water earned today. Practice still gives XP!'}
         </Text>
       </View>
+
+      {xpToday ? (
+        <View style={styles.xpBox}>
+          <View style={styles.xpTop}>
+            <Text style={styles.xpLabel}>XP TODAY</Text>
+            <Text style={styles.xpNum}>{`${xpToday.today} / ${xpToday.limit}`}</Text>
+          </View>
+          <View style={styles.xpTrack}>
+            <View style={[styles.xpFill, { width: `${Math.min(100, (xpToday.today / Math.max(1, xpToday.limit)) * 100)}%` }]} />
+          </View>
+          {xpToday.today >= xpToday.limit ? <Text style={styles.xpDone}>Daily XP limit reached. Come back tomorrow for more!</Text> : null}
+        </View>
+      ) : null}
 
       {due.length ? (
         <>
@@ -333,7 +356,16 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
           </View>
         ) : null}
         {result.waterFull ? <Text style={styles.rewardDim}>{`Today's ${WATER_PER_DAY} waters are already earned.`}</Text> : null}
-        {result.xp !== null ? <Text style={styles.rewardText}>{`+${result.xp} XP${result.leveledUp ? '  ·  LEVEL UP!' : ''}`}</Text> : null}
+        {result.xp !== null && result.xp > 0 ? (
+          <Text style={styles.rewardText}>{`+${result.xp} XP${result.leveledUp ? '  ·  LEVEL UP!' : ''}`}</Text>
+        ) : null}
+        {result.xpFull ? (
+          <Text style={styles.rewardDim}>
+            {result.xp
+              ? `You've reached today's XP limit${xpToday ? ` (${xpToday.limit})` : ''}.`
+              : `No XP: today's XP limit${xpToday ? ` (${xpToday.limit})` : ''} is reached. Come back tomorrow!`}
+          </Text>
+        ) : null}
         {result.xpError ? <Text style={styles.rewardDim}>{result.xpError}</Text> : null}
         {result.nextDays ? (
           <Text style={styles.rewardDim}>{`Review it again in ${result.nextDays} day${result.nextDays > 1 ? 's' : ''}.`}</Text>
@@ -390,6 +422,13 @@ const styles = StyleSheet.create({
   sub: { fontFamily: 'Montserrat_500Medium', fontSize: 13, color: DIM, textAlign: 'center', marginTop: 4 },
   waterBox: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: CARD, borderWidth: 2, borderColor: INK, padding: 10, marginTop: 14 },
   waterIcon: { width: 30, height: 30 },
+  xpBox: { backgroundColor: CARD, borderWidth: 2, borderColor: INK, padding: 10, marginTop: 8, gap: 6 },
+  xpTop: { flexDirection: 'row', justifyContent: 'space-between' },
+  xpLabel: { fontFamily: 'Silkscreen_700Bold', fontSize: 12, color: PARCHMENT },
+  xpNum: { fontFamily: 'Silkscreen_700Bold', fontSize: 12, color: GOLD },
+  xpTrack: { height: 10, backgroundColor: INK, borderWidth: 1, borderColor: '#5A3E2B' },
+  xpFill: { height: '100%', backgroundColor: '#9BCB4C' },
+  xpDone: { fontFamily: 'Montserrat_500Medium', fontSize: 12, color: DIM },
   waterText: { flex: 1, marginLeft: 6, fontFamily: 'Montserrat_500Medium', fontSize: 13, color: PARCHMENT },
   section: { fontFamily: 'Silkscreen_700Bold', fontSize: 14, color: PARCHMENT, marginTop: 20, marginBottom: 8 },
   empty: { fontFamily: 'Montserrat_400Regular', fontSize: 13, color: DIM },

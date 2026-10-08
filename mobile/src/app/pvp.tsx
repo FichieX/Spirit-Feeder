@@ -3,11 +3,12 @@ import { Alert, Animated, Easing, Image, Pressable, StyleSheet, Text, View, useW
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Sprite, { PreloadSheets } from '../components/pets/Sprite';
-import { PET_BY_ANIMAL, PET_SCALE, animsFor, withNecklace, type Anim } from '../pets/forms';
+import { PET_BY_ANIMAL, PET_SCALE, animsFor, dressed, type Anim } from '../pets/forms';
 import { POWERS, loadPowers, savePowers, type PowerBag, type PowerKey } from '../battle/powerups';
 import { VICTORY_VERSES, COMFORT_VERSES, pickVerse, type Verse } from '../battle/verses';
-import { loadDecor } from '../decor/items';
+import { loadDecor, outfitOn } from '../decor/items';
 import { battleSocketUrl } from '../api/ranked';
+import { answerBattleInvite, inviteToBattle, MODE_INFO, type BattleInvite, type BattleMode } from '../api/friends';
 
 // ---------- Colors ----------
 const INK = '#1B1612';
@@ -38,12 +39,13 @@ const PVP_INFO: Record<PowerKey, string> = {
   fifty: 'Remove one wrong answer',
 };
 
-type Phase = 'connecting' | 'searching' | 'vs' | 'question' | 'result' | 'end' | 'error';
+// over = a friend invite ended without a battle (declined, no answer, they left)
+type Phase = 'connecting' | 'searching' | 'vs' | 'question' | 'result' | 'end' | 'over' | 'error';
 type Side = { userId: number; username: string; petName: string; animalId: number; level: number; points: number };
 type Question = { n: number; q: string; ref: string; choices: string[]; seconds: number };
 type Info = { choice: number | null; seconds: number | null; right: boolean; hit: boolean; blocked: boolean };
 type Result = { n: number; correct: string; correctIndex: number; ref: string; you: Info; opp: Info; attacker: 'you' | 'opp' | null; hearts: { you: number; opp: number } };
-type End = { result: 'win' | 'lose' | 'draw'; reason: 'hearts' | 'left' | 'questions'; change: number; points: number };
+type End = { result: 'win' | 'lose' | 'draw'; reason: 'hearts' | 'left' | 'questions'; change: number; points: number; mode?: BattleMode };
 type PetMove = 'idle' | 'tap' | 'die';
 
 function Hearts({ count, total }: { count: number; total: number }) {
@@ -56,9 +58,22 @@ function Hearts({ count, total }: { count: number; total: number }) {
   );
 }
 
-// Live ranked battle against another player (like Kahoot, but with hearts)
+// Live battle against another player (like Kahoot, but with hearts).
+// Ranked: FIND OPPONENT matches you with anyone. Friends: comes here with an inviteId
+// (role "host" = you invited them, "guest" = you accepted their invite).
 export default function Pvp() {
-  const params = useLocalSearchParams<{ username?: string; userId?: string; animalId?: string; petName?: string; level?: string }>();
+  const params = useLocalSearchParams<{
+    username?: string;
+    userId?: string;
+    animalId?: string;
+    petName?: string;
+    level?: string;
+    inviteId?: string;
+    mode?: string;
+    friendName?: string;
+    friendId?: string;
+    role?: string;
+  }>();
   const userId = Number(params.userId) || 0;
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -88,9 +103,23 @@ export default function Pvp() {
   const [used, setUsed] = useState<PowerKey[]>([]);
   const [bag, setBag] = useState<PowerBag>({ freeze: 0, shield: 0, fifty: 0 });
   const [necklaceOn, setNecklaceOn] = useState(false);
+  const [outfit, setOutfit] = useState(true); // grown-up outfit
   const [searchSecs, setSearchSecs] = useState(0);
   const [petMove, setPetMove] = useState<PetMove>('idle');
   const [oppMove, setOppMove] = useState<PetMove>('idle');
+
+  // ---------- Friend battles ----------
+  const [friendGame, setFriendGame] = useState(!!params.inviteId);
+  const [battleMode, setBattleMode] = useState<BattleMode>(params.mode === 'fun' ? 'fun' : 'ranked');
+  const [friendName, setFriendName] = useState(params.friendName ?? '');
+  const [waitingUntil, setWaitingUntil] = useState(0); // when your invite runs out
+  const [accepted, setAccepted] = useState(false);
+  const [overText, setOverText] = useState('');
+  const [incoming, setIncoming] = useState<(BattleInvite & { until: number }) | null>(null); // friend invites you while you're here
+  const [inviteError, setInviteError] = useState('');
+  const isHost = useRef(params.role !== 'guest');
+  const friendNameRef = useRef(friendName);
+  friendNameRef.current = friendName;
 
   const ws = useRef<WebSocket | null>(null);
   const qStart = useRef(0);
@@ -143,7 +172,10 @@ export default function Pvp() {
   // ---------- Load power-ups and the necklace ----------
   useEffect(() => {
     loadPowers(params.username).then(setBag);
-    loadDecor(params.username).then((d) => setNecklaceOn(d.used.includes('necklace')));
+    loadDecor(params.username).then((d) => {
+      setNecklaceOn(d.used.includes('necklace'));
+      setOutfit(outfitOn(d, PET_BY_ANIMAL[Number(params.animalId) || 1] ?? 'donkey'));
+    });
   }, [params.username]);
 
   // ---------- Connect ----------
@@ -153,8 +185,7 @@ export default function Pvp() {
     } catch {}
   };
 
-  const queue = () => {
-    setPhase('searching');
+  const resetBattle = () => {
     setSearchSecs(0);
     setMe(null);
     setOpp(null);
@@ -166,7 +197,28 @@ export default function Pvp() {
     setOppMove('idle');
     setShieldOn(false);
     setOppShield(false);
+    setIncoming(null);
+    setInviteError('');
+    setAccepted(false);
+  };
+
+  // Ranked: find anyone
+  const queue = () => {
+    resetBattle();
+    setFriendGame(false);
+    setBattleMode('ranked');
+    setPhase('searching');
     send({ type: 'queue', petName: params.petName || '' });
+  };
+
+  // Friends: join an invite (the one you sent, or one you accepted)
+  const joinInvite = (inviteId: string, asGuest: boolean) => {
+    resetBattle();
+    setFriendGame(true);
+    isHost.current = !asGuest;
+    setWaitingUntil(0);
+    setPhase(asGuest ? 'connecting' : 'searching');
+    send({ type: 'friend', inviteId, petName: params.petName || '' });
   };
 
   useEffect(() => {
@@ -177,7 +229,7 @@ export default function Pvp() {
     }
     const sock = new WebSocket(battleSocketUrl(userId));
     ws.current = sock;
-    sock.onopen = () => queue();
+    sock.onopen = () => (params.inviteId ? joinInvite(params.inviteId, params.role === 'guest') : queue());
     sock.onerror = () => {
       if (leaving.current) return;
       setError("Can't reach the battle server. Make sure the server is running and you're on the same Wi-Fi.");
@@ -185,7 +237,7 @@ export default function Pvp() {
     };
     sock.onclose = () => {
       if (leaving.current) return;
-      setPhase((p) => (p === 'end' || p === 'error' ? p : 'error'));
+      setPhase((p) => (p === 'end' || p === 'error' || p === 'over' ? p : 'error'));
       setError((e) => e || 'Lost connection to the battle server.');
     };
     sock.onmessage = (e) => {
@@ -215,7 +267,31 @@ export default function Pvp() {
         break;
       case 'cancelled':
         break;
+      case 'waiting_friend':
+        setFriendName(msg.friend);
+        setBattleMode(msg.mode === 'fun' ? 'fun' : 'ranked');
+        setWaitingUntil(Date.now() + msg.seconds * 1000);
+        setPhase('searching');
+        break;
+      case 'friend_accepted':
+        setAccepted(true);
+        break;
+      case 'invite_over': {
+        const who = friendNameRef.current || 'Your friend';
+        const text: Record<string, string> = {
+          declined: `${who} said no this time.`,
+          expired: `${who} didn't answer in time.`,
+          cancelled: `${who} left, so the battle is off.`,
+        };
+        setOverText(text[msg.reason] ?? 'That battle invite has ended.');
+        setPhase((p) => (p === 'vs' || p === 'question' || p === 'result' || p === 'end' ? p : 'over'));
+        break;
+      }
+      case 'friend_invite':
+        setIncoming({ ...msg, until: Date.now() + msg.seconds * 1000 });
+        break;
       case 'match':
+        setBattleMode(msg.mode === 'fun' ? 'fun' : 'ranked');
         meRef.current = msg.you;
         oppRef.current = msg.opp;
         setMe(msg.you);
@@ -365,26 +441,67 @@ export default function Pvp() {
     send({ type: 'power', power: key });
   };
 
-  const goLeaderboard = () => {
+  // Back to the lobby (ranked) or the friends list (friend battles)
+  const goBack = () => {
     leaving.current = true;
     ws.current?.close();
     router.replace({
-      pathname: '/ranked',
+      pathname: friendGame ? '/friends' : '/ranked',
       params: { username: params.username ?? '', userId: params.userId ?? '', animalId: params.animalId ?? '', petName: params.petName ?? '', level: params.level ?? '' },
     });
   };
 
   const cancelSearch = () => {
     send({ type: 'cancel' });
-    goLeaderboard();
+    goBack();
   };
 
   const leaveBattle = () => {
-    Alert.alert('Leave the battle?', 'Leaving counts as a loss, and your opponent takes your points.', [
-      { text: 'Stay', style: 'cancel' },
-      { text: 'Leave', style: 'destructive', onPress: goLeaderboard },
-    ]);
+    Alert.alert(
+      'Leave the battle?',
+      battleMode === 'fun' ? 'Leaving counts as a loss.' : 'Leaving counts as a loss, and your opponent takes your points.',
+      [
+        { text: 'Stay', style: 'cancel' },
+        { text: 'Leave', style: 'destructive', onPress: goBack },
+      ],
+    );
   };
+
+  // Invite the same friend again (after a battle, or after they said no)
+  const rematch = async () => {
+    const friendId = oppRef.current?.userId ?? Number(params.friendId);
+    if (!friendId) return;
+    setInviteError('');
+    try {
+      const r = await inviteToBattle(userId, friendId, battleMode);
+      setFriendName(r.friend);
+      setBattleMode(r.mode);
+      joinInvite(r.inviteId, r.accepted);
+    } catch (err: any) {
+      setInviteError(err?.message || "Couldn't send the invite.");
+    }
+  };
+
+  // A friend invited you while you're on this screen
+  const acceptIncoming = async () => {
+    if (!incoming) return;
+    const inv = incoming;
+    try {
+      await answerBattleInvite(userId, inv.inviteId, true);
+      setFriendName(inv.fromName);
+      setBattleMode(inv.mode);
+      joinInvite(inv.inviteId, true);
+    } catch (err: any) {
+      setIncoming(null);
+      setInviteError(err?.message || 'That invite has ended.');
+    }
+  };
+  const declineIncoming = () => {
+    if (incoming) answerBattleInvite(userId, incoming.inviteId, false).catch(() => {});
+    setIncoming(null);
+  };
+  const showIncoming = !!incoming && incoming.until > Date.now() && (phase === 'searching' || phase === 'end' || phase === 'over');
+  const waitLeft = Math.max(0, Math.ceil((waitingUntil - Date.now()) / 1000));
 
   // ---------- Sprites ----------
   const myKey = PET_BY_ANIMAL[Number(params.animalId) || me?.animalId || 1] ?? 'donkey';
@@ -408,7 +525,7 @@ export default function Pvp() {
     <View style={styles.screen}>
       <PreloadSheets
         sheets={[myAnims.idle.sheet, myAnims.tap.sheet, ...(myAnims.die ? [myAnims.die.anim.sheet] : [])]
-          .map((s) => withNecklace(s, necklaceOn))
+          .map((s) => dressed(s, outfit, necklaceOn))
           .concat([oppAnims.idle.sheet, oppAnims.tap.sheet, ...(oppAnims.die ? [oppAnims.die.anim.sheet] : [])])}
       />
       <Animated.View style={{ flex: 1, transform: [{ translateX: shake }] }}>
@@ -453,7 +570,7 @@ export default function Pvp() {
           >
             <Sprite
               key={`me-${myKey}-${petMove}`}
-              sheet={withNecklace(mine.anim.sheet, necklaceOn)}
+              sheet={dressed(mine.anim.sheet, outfit, necklaceOn)}
               ms={mine.anim.ms}
               frameW={mine.w}
               frameH={mine.h}
@@ -518,15 +635,55 @@ export default function Pvp() {
 
         {/* ---------- Bottom panel ---------- */}
         <View style={[styles.panel, { paddingBottom: insets.bottom + 12 }]}>
-          {phase === 'connecting' || phase === 'searching' ? (
+          {(phase === 'connecting' || phase === 'searching') && !friendGame ? (
             <View style={styles.center}>
               <Text style={styles.searchTitle}>{phase === 'connecting' ? 'CONNECTING...' : 'SEARCHING FOR AN OPPONENT'}</Text>
               <Text style={styles.searchSub}>
                 {phase === 'searching' ? `${'.'.repeat((searchSecs % 3) + 1)}  ${searchSecs}s` : ' '}
               </Text>
-              <Text style={styles.searchHint}>Another player needs to tap FIND OPPONENT too.</Text>
+              <Text style={styles.searchHint}>Finding someone at your level to battle...</Text>
               <Pressable onPress={cancelSearch} style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}>
                 <Text style={styles.secondaryText}>CANCEL</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {/* Friend battle: waiting for them to accept / joining their battle */}
+          {(phase === 'connecting' || phase === 'searching') && friendGame ? (
+            <View style={styles.center}>
+              <Text style={styles.searchTitle}>
+                {phase === 'connecting' || !isHost.current
+                  ? `JOINING ${friendName.toUpperCase()}...`
+                  : accepted
+                    ? `${friendName.toUpperCase()} ACCEPTED!`
+                    : `WAITING FOR ${friendName.toUpperCase()}`}
+              </Text>
+              <Text style={styles.searchSub}>
+                {phase === 'searching' && isHost.current && !accepted ? (waitingUntil ? `${waitLeft}s` : '...') : 'Starting...'}
+              </Text>
+              <View style={[styles.modeTag, battleMode === 'ranked' && styles.modeTagRanked]}>
+                <Text style={styles.modeTagText}>{`${MODE_INFO[battleMode].name} BATTLE`}</Text>
+                <Text style={styles.modeTagInfo}>{MODE_INFO[battleMode].info}</Text>
+              </View>
+              {isHost.current && !accepted ? <Text style={styles.searchHint}>They need to tap ACCEPT on their phone.</Text> : null}
+              <Pressable onPress={cancelSearch} style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}>
+                <Text style={styles.secondaryText}>CANCEL</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {phase === 'over' ? (
+            <View style={styles.center}>
+              <Text style={styles.searchTitle}>NO BATTLE THIS TIME</Text>
+              <Text style={styles.searchHint}>{overText}</Text>
+              {inviteError ? <Text style={[styles.searchHint, { color: EMBER }]}>{inviteError}</Text> : null}
+              {params.friendId || oppRef.current ? (
+                <Pressable onPress={rematch} style={({ pressed }) => [styles.primaryBtn, { alignSelf: 'stretch' }, pressed && styles.pressed]}>
+                  <Text style={styles.primaryText}>INVITE AGAIN</Text>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={goBack} style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}>
+                <Text style={styles.secondaryText}>BACK</Text>
               </Pressable>
             </View>
           ) : null}
@@ -535,7 +692,7 @@ export default function Pvp() {
             <View style={styles.center}>
               <Text style={[styles.searchTitle, { color: EMBER }]}>CAN'T BATTLE</Text>
               <Text style={styles.searchHint}>{error}</Text>
-              <Pressable onPress={goLeaderboard} style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}>
+              <Pressable onPress={goBack} style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}>
                 <Text style={styles.secondaryText}>BACK</Text>
               </Pressable>
             </View>
@@ -543,7 +700,7 @@ export default function Pvp() {
 
           {phase === 'vs' ? (
             <View style={styles.center}>
-              <Text style={styles.searchTitle}>OPPONENT FOUND!</Text>
+              <Text style={styles.searchTitle}>{friendGame ? `FRIEND BATTLE · ${MODE_INFO[battleMode].name}` : 'OPPONENT FOUND!'}</Text>
               <Text style={styles.searchHint}>Get ready...</Text>
             </View>
           ) : null}
@@ -636,23 +793,49 @@ export default function Pvp() {
             {end.reason === 'left' ? (
               <Text style={styles.endSub}>{end.result === 'win' ? 'Your opponent left the battle.' : 'You left the battle.'}</Text>
             ) : null}
-            <View style={styles.pointsRow}>
-              <Text style={[styles.pointsChange, { color: end.change > 0 ? GREEN : end.change < 0 ? EMBER : PARCHMENT }]}>
-                {end.change > 0 ? `+${end.change}` : `${end.change}`} points
-              </Text>
-              <Text style={styles.pointsNow}>{`Now ${end.points} points`}</Text>
-            </View>
+            {battleMode === 'fun' ? (
+              <View style={styles.pointsRow}>
+                <Text style={[styles.pointsChange, { color: PARCHMENT }]}>JUST FOR FUN</Text>
+                <Text style={styles.pointsNow}>No points won or lost</Text>
+              </View>
+            ) : (
+              <View style={styles.pointsRow}>
+                <Text style={[styles.pointsChange, { color: end.change > 0 ? GREEN : end.change < 0 ? EMBER : PARCHMENT }]}>
+                  {end.change > 0 ? `+${end.change}` : `${end.change}`} points
+                </Text>
+                <Text style={styles.pointsNow}>{`Now ${end.points} points`}</Text>
+              </View>
+            )}
             {verse ? (
               <View style={styles.verseBox}>
                 <Text style={styles.verseText}>{`“${verse.text}”`}</Text>
                 <Text style={styles.verseRef}>{`— ${verse.ref}`}</Text>
               </View>
             ) : null}
-            <Pressable onPress={queue} style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}>
-              <Text style={styles.primaryText}>PLAY AGAIN</Text>
+            {inviteError ? <Text style={[styles.endSub, { color: EMBER }]}>{inviteError}</Text> : null}
+            <Pressable onPress={friendGame ? rematch : queue} style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}>
+              <Text style={styles.primaryText}>{friendGame ? 'REMATCH' : 'PLAY AGAIN'}</Text>
             </Pressable>
-            <Pressable onPress={goLeaderboard} style={({ pressed }) => [styles.secondaryBtn, { alignSelf: 'stretch' }, pressed && styles.pressed]}>
-              <Text style={styles.secondaryText}>LEADERBOARD</Text>
+            <Pressable onPress={goBack} style={({ pressed }) => [styles.secondaryBtn, { alignSelf: 'stretch' }, pressed && styles.pressed]}>
+              <Text style={styles.secondaryText}>{friendGame ? 'FRIENDS' : 'LEADERBOARD'}</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {/* A friend invited you (rematch, or while you were searching) */}
+      {showIncoming && incoming ? (
+        <View style={[styles.inviteCard, { top: insets.top + 10 }]} accessibilityLiveRegion="polite">
+          <Text style={styles.inviteTitle}>
+            {`${incoming.fromName} wants ${incoming.fromId === oppRef.current?.userId ? 'a rematch' : 'to battle'}!`}
+          </Text>
+          <Text style={styles.inviteInfo}>{`${MODE_INFO[incoming.mode].name} · ${MODE_INFO[incoming.mode].info}`}</Text>
+          <View style={styles.inviteRow}>
+            <Pressable onPress={acceptIncoming} style={({ pressed }) => [styles.primaryBtn, { flex: 1, paddingVertical: 8 }, pressed && styles.pressed]}>
+              <Text style={[styles.primaryText, { fontSize: 15 }]}>ACCEPT</Text>
+            </Pressable>
+            <Pressable onPress={declineIncoming} style={({ pressed }) => [styles.secondaryBtn, { flex: 1, paddingVertical: 8 }, pressed && styles.pressed]}>
+              <Text style={styles.secondaryText}>NO</Text>
             </Pressable>
           </View>
         </View>
@@ -740,4 +923,12 @@ const styles = StyleSheet.create({
   primaryText: { fontFamily: 'Silkscreen_700Bold', fontSize: 18, color: INK, letterSpacing: 1 },
   secondaryBtn: { backgroundColor: '#3D2B22', borderWidth: 2, borderColor: INK, borderBottomWidth: 4, borderBottomColor: '#5A3E2B', paddingVertical: 10, paddingHorizontal: 22, alignItems: 'center' },
   secondaryText: { fontFamily: 'Silkscreen_700Bold', fontSize: 14, color: PARCHMENT },
+  modeTag: { alignSelf: 'stretch', backgroundColor: INK, borderLeftWidth: 4, borderLeftColor: GREEN, padding: 10 },
+  modeTagRanked: { borderLeftColor: GOLD },
+  modeTagText: { fontFamily: 'Silkscreen_700Bold', fontSize: 14, color: PARCHMENT },
+  modeTagInfo: { fontFamily: 'Montserrat_400Regular', fontSize: 12, color: DIM, marginTop: 2 },
+  inviteCard: { position: 'absolute', left: 12, right: 12, zIndex: 120, elevation: 120, backgroundColor: MAHOGANY, borderWidth: 3, borderColor: GOLD, padding: 12, gap: 6 },
+  inviteTitle: { fontFamily: 'Silkscreen_700Bold', fontSize: 15, color: GOLD },
+  inviteInfo: { fontFamily: 'Montserrat_400Regular', fontSize: 12, color: PARCHMENT },
+  inviteRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
 });
