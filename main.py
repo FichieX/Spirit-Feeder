@@ -622,3 +622,23 @@ def feed_pet(data: FeedPetRequest):
         raise HTTPException(status_code=400, detail=f"Failed to feed pet: {str(e)}")
     finally:
         db.close()
+
+class RestartPetRequest(BaseModel):
+    user_id: int
+
+
+@app.post("/api/pet/restart")
+def restart_pet(data: RestartPetRequest):
+    """After the pet dies: start over with a new egg (XP 0, Lv 1, hunger full)."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == data.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+        user.xp = 0
+        user.animal_level = 1
+        user.last_fed_at = datetime.utcnow()
+        db.commit()
+        return {"message": "New egg!", "xp": 0, "animal_level": 1, "hunger": 100, "is_dead": False}
+    finally:
+        db.close()
