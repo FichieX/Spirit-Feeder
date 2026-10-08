@@ -716,8 +716,6 @@ export default function Study() {
         </View>
       </Modal>
 
-      <TestPanel visible={testOpen} groups={testGroups} info={testInfo} onClose={() => setTestOpen(false)} />
-
       <ExitModal
         visible={leaving}
         petName={petName}
@@ -753,6 +751,9 @@ export default function Study() {
           </View>
         </View>
       ) : null}
+
+      {/* Test tools: last, so they sit on top of everything */}
+      <TestPanel visible={testOpen} groups={testGroups} info={testInfo} onClose={() => setTestOpen(false)} />
     </Animated.View>
   );
 }

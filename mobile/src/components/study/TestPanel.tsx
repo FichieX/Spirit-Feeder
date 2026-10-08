@@ -1,4 +1,4 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const INK = '#1B1612';
@@ -22,12 +22,14 @@ type Props = {
 // Panel full of buttons for testing the pet (only shown to test accounts).
 // Sits at the BOTTOM of the screen (away from the clock and battery), and
 // tapping any button does the action and closes the panel.
-// No open/close animation, so it never blocks the food basket from opening.
+// Not an iOS Modal: a plain layer on top of the study. When it's closed it is
+// removed completely, so it can never leave an invisible layer that blocks taps
+// (iOS Modals sometimes do, which made TEST unclickable the second time).
 export default function TestPanel({ visible, groups, info, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  if (!visible) return null;
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
     <View style={styles.overlay}>
       {/* tap the dark area above the panel to close */}
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close test tools" />
@@ -76,13 +78,14 @@ export default function TestPanel({ visible, groups, info, onClose }: Props) {
         </ScrollView>
       </View>
     </View>
-    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    elevation: 100,
     backgroundColor: 'rgba(27,22,18,0.55)',
   },
   panel: {
