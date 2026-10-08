@@ -130,7 +130,11 @@ export default function Study() {
       if (data.animal_id && !petChosen.current) setAnimalId(data.animal_id);
       setLevel(data.animal_level ?? 1);
       setHunger((data.hunger ?? 100) / 100); // server hunger is 0-100
-      setProgress(Math.min(1, (data.xp ?? 0) / 300));
+      // Server levels: level N starts at N^3 total XP (Lv 2 = 8, Lv 5 = 125, Lv 10 = 1000)
+      const lv = data.animal_level ?? 1;
+      const start = lv ** 3;
+      const next = data.next_level_xp ?? (lv + 1) ** 3;
+      setProgress(Math.max(0, Math.min(1, ((data.xp ?? 0) - start) / Math.max(1, next - start))));
       setIsDead(data.is_dead ?? false);
     } catch (err: any) {
       // Server not reachable: keep using what's saved on the phone
