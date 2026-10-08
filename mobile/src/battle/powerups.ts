@@ -27,9 +27,14 @@ export const isRarePower = (petKey: string, key: PowerKey) => oddsFor(petKey)[ke
 const EMPTY: PowerBag = { freeze: 0, shield: 0, fifty: 0 };
 const keyFor = (username?: string) => `powers:${username ?? 'guest'}`;
 
+// Accounts that start with power-ups (only until they save their first change)
+const STARTER_POWERS: Record<string, number> = { tester2: 10, tester3: 10 };
+
 export async function loadPowers(username?: string): Promise<PowerBag> {
   try {
     const raw = await AsyncStorage.getItem(keyFor(username));
+    const gift = username ? STARTER_POWERS[username.trim().toLowerCase()] : undefined;
+    if (!raw && gift) return { freeze: gift, shield: gift, fifty: gift };
     return { ...EMPTY, ...(raw ? JSON.parse(raw) : {}) };
   } catch {
     return { ...EMPTY };

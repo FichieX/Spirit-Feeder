@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Sprite, { PreloadSheets } from '../components/pets/Sprite';
 import { PET_BY_ANIMAL, PET_SCALE, animsFor, withNecklace, type Anim } from '../pets/forms';
-import { pickQuestions, choicesFor, type Question } from '../battle/questions';
+import { pickQuestions, choicesFor, loadSeen, markSeen, type Question } from '../battle/questions';
 import { POWERS, isRarePower, loadPowers, savePowers, type PowerBag, type PowerKey } from '../battle/powerups';
 import { rollReward, type Reward } from '../battle/rewards';
 import { decorItem, loadDecor, saveDecor, type DecorState } from '../decor/items';
@@ -85,8 +85,16 @@ export default function Battle() {
   const arenaH = ARENA_H * k;
 
   // ---------- Battle state ----------
-  const questions = useMemo<Question[]>(() => pickQuestions(milestone, 12), [milestone]);
+  // Random questions that get harder every 2 questions (and every serpent starts harder).
+  // First a quick pick, then swapped for one that skips questions this player has already seen.
+  const [questions, setQuestions] = useState<Question[]>(() => pickQuestions(milestone, 12));
   const [qIndex, setQIndex] = useState(0);
+  const started = useRef(false);
+  useEffect(() => {
+    loadSeen(username).then((seen) => {
+      if (!started.current) setQuestions(pickQuestions(milestone, 12, seen));
+    });
+  }, [milestone, username]);
   const question = questions[qIndex % questions.length];
   const choices = useMemo(() => choicesFor(question), [question]);
 
@@ -163,6 +171,13 @@ export default function Battle() {
       setPhase('ask');
     });
   }, []);
+
+  // Each question shown is remembered, so the next battles pick new ones
+  useEffect(() => {
+    if (phase !== 'ask') return;
+    started.current = true;
+    markSeen(username, question);
+  }, [phase, qIndex]);
 
   // ---------- Timer ----------
   useEffect(() => {

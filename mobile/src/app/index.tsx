@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
-  Alert,
   Animated,
   BackHandler,
   Easing,
@@ -17,6 +16,7 @@ import {
   Montserrat_500Medium,
   Montserrat_700Bold,
 } from '@expo-google-fonts/montserrat';
+import { useRouter } from 'expo-router';
 import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
 
@@ -28,6 +28,7 @@ type Mode = 'login' | 'toRegister' | 'register' | 'toLogin';
 
 export default function AuthScreen() {
   const { height } = useWindowDimensions();
+  const router = useRouter();
   const [fontsLoaded] = useFonts({
     Silkscreen_700Bold,
     Montserrat_300Light,
@@ -101,8 +102,8 @@ export default function AuthScreen() {
 
   const goToForgotPassword = () => {
     Keyboard.dismiss();
-    // FOROGT PASSOWRD
-    Alert.alert('Forgot password', 'Password reset is coming soon.');
+    // Forgot password: email -> 6-digit code -> new password (see forgot.tsx)
+    router.push('/forgot');
   };
 
   // back button go from registration back to login

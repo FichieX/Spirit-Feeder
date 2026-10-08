@@ -513,6 +513,14 @@ export default function Study() {
         { label: 'Get all decorations', onPress: () => updateDecor({ ...decor, owned: DECOR.map((d) => d.key) }) },
         { label: 'Remove all decorations', onPress: () => updateDecor({ owned: [], used: [] }) },
         {
+          label: '+10 each power-up',
+          onPress: async () => {
+            const bag = await loadPowers(username);
+            await savePowers(username, { freeze: bag.freeze + 10, shield: bag.shield + 10, fifty: bag.fifty + 10 });
+            Alert.alert('Power-ups', 'Added +10 Freeze Time, +10 Immunity and +10 Eliminate.');
+          },
+        },
+        {
           label: '+1 each power-up',
           onPress: async () => {
             const bag = await loadPowers(username);
@@ -695,14 +703,23 @@ export default function Study() {
         <MenuIcon
           label="battle"
           source={require('../../assets/images/icon_coin.png')}
-          onPress={() =>
-            Alert.alert(
-              'Battles',
-              level < SERPENT_EVERY
-                ? `A serpent will ambush ${petName || 'your pet'} at Lv ${SERPENT_EVERY}, then every ${SERPENT_EVERY} levels. Keep reading Scripture to be ready!`
-                : `Next serpent at Lv ${milestone + SERPENT_EVERY}. Battles against other players are coming soon!`,
-            )
-          }
+          onPress={() => {
+            // Ranked battles against other players (the serpent still ambushes every 5 levels)
+            if (stage !== 'baby') {
+              Alert.alert('Battles', 'Hatch your egg first, then your pet can battle!');
+              return;
+            }
+            router.replace({
+              pathname: '/ranked',
+              params: {
+                username: username ?? '',
+                userId: userId ?? '',
+                animalId: String(animalId),
+                petName: petName || '',
+                level: String(level),
+              },
+            });
+          }}
         />
       </View>
 

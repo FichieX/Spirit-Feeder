@@ -1,13 +1,21 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // Bible questions for battles. Each has 1 correct answer + 2 wrong ones.
-// tier 1 = easy (serpent at Lv 5), 2 = medium (Lv 10), 3 = hard (Lv 15+).
-// Later the backend can send these instead (quiz_questions table).
+// tier 1 = easy ... tier 5 = expert.
+//
+// Every serpent is harder than the last (Lv 5 starts at tier 1, Lv 10 at tier 2 ... Lv 25+ at tier 5),
+// and inside one battle the questions get harder every 2 questions.
+// Questions are random, and the ones you've already seen are saved so they don't repeat
+// until you've seen every question of that tier.
+
+export type Tier = 1 | 2 | 3 | 4 | 5;
 
 export type Question = {
   q: string;
   correct: string;
   wrong: [string, string];
   ref: string; // where to read about it
-  tier: 1 | 2 | 3;
+  tier: Tier;
 };
 
 export const QUESTIONS: Question[] = [
@@ -24,6 +32,17 @@ export const QUESTIONS: Question[] = [
   { tier: 1, q: 'What is the first book of the Bible?', correct: 'Genesis', wrong: ['Exodus', 'Matthew'], ref: 'Genesis 1:1' },
   { tier: 1, q: 'Which animal spoke to Balaam?', correct: 'A donkey', wrong: ['A lion', 'A serpent'], ref: 'Numbers 22:28' },
   { tier: 1, q: 'Who was the mother of Jesus?', correct: 'Mary', wrong: ['Martha', 'Elizabeth'], ref: 'Luke 1:30-31' },
+  { tier: 1, q: 'In how many days did God make the heavens and the earth?', correct: '6', wrong: ['7', '40'], ref: 'Exodus 20:11' },
+  { tier: 1, q: 'Who was the first man?', correct: 'Adam', wrong: ['Noah', 'Abel'], ref: 'Genesis 2' },
+  { tier: 1, q: 'Who was the first woman?', correct: 'Eve', wrong: ['Sarah', 'Mary'], ref: 'Genesis 3:20' },
+  { tier: 1, q: 'What sign did God put in the sky after the flood?', correct: 'A rainbow', wrong: ['A star', 'A comet'], ref: 'Genesis 9:13' },
+  { tier: 1, q: 'Who was Mary\'s husband?', correct: 'Joseph', wrong: ['Joshua', 'Zechariah'], ref: 'Matthew 1:18-19' },
+  { tier: 1, q: 'Where was baby Jesus laid after he was born?', correct: 'A manger', wrong: ['A boat', 'A tent'], ref: 'Luke 2:7' },
+  { tier: 1, q: 'What did Jesus walk on?', correct: 'Water', wrong: ['Fire', 'Clouds'], ref: 'Matthew 14:25' },
+  { tier: 1, q: 'Who betrayed Jesus?', correct: 'Judas Iscariot', wrong: ['Peter', 'John'], ref: 'Matthew 26:14-16' },
+  { tier: 1, q: 'On which day did Jesus rise from the dead?', correct: 'The third day', wrong: ['The first day', 'The seventh day'], ref: '1 Corinthians 15:4' },
+  { tier: 1, q: 'What is the last book of the Bible?', correct: 'Revelation', wrong: ['Jude', 'Malachi'], ref: 'Revelation 22' },
+  { tier: 1, q: 'Who was Moses\' brother?', correct: 'Aaron', wrong: ['Caleb', 'Joshua'], ref: 'Exodus 4:14' },
 
   // ---- tier 2: medium ----
   { tier: 2, q: 'How many days and nights did it rain on the ark?', correct: '40', wrong: ['7', '100'], ref: 'Genesis 7:12' },
@@ -38,6 +57,18 @@ export const QUESTIONS: Question[] = [
   { tier: 2, q: 'What did God give Moses on Mount Sinai?', correct: 'The Ten Commandments', wrong: ['A staff', 'Manna'], ref: 'Exodus 20' },
   { tier: 2, q: 'Who was taken up to heaven in a whirlwind?', correct: 'Elijah', wrong: ['Elisha', 'Enoch'], ref: '2 Kings 2:11' },
   { tier: 2, q: 'Who wrote most of the Psalms?', correct: 'David', wrong: ['Solomon', 'Asaph'], ref: 'Psalms' },
+  { tier: 2, q: 'Who was Abraham\'s wife?', correct: 'Sarah', wrong: ['Rebekah', 'Rachel'], ref: 'Genesis 17:15' },
+  { tier: 2, q: 'What was the name of the son God promised Abraham and Sarah?', correct: 'Isaac', wrong: ['Ishmael', 'Jacob'], ref: 'Genesis 21:3' },
+  { tier: 2, q: 'What new name did God give Jacob?', correct: 'Israel', wrong: ['Judah', 'Edom'], ref: 'Genesis 32:28' },
+  { tier: 2, q: 'What food fell from heaven for Israel in the wilderness?', correct: 'Manna', wrong: ['Figs', 'Barley bread'], ref: 'Exodus 16:15' },
+  { tier: 2, q: 'How many plagues did God send on Egypt?', correct: '10', wrong: ['7', '12'], ref: 'Exodus 7-12' },
+  { tier: 2, q: 'Which sea did God part for Israel?', correct: 'The Red Sea', wrong: ['The Dead Sea', 'The Sea of Galilee'], ref: 'Exodus 14; 15:4' },
+  { tier: 2, q: 'Which tax collector left his booth to follow Jesus?', correct: 'Matthew', wrong: ['Luke', 'Thaddaeus'], ref: 'Matthew 9:9' },
+  { tier: 2, q: 'What work did Peter and Andrew do before following Jesus?', correct: 'Fishermen', wrong: ['Carpenters', 'Shepherds'], ref: 'Matthew 4:18' },
+  { tier: 2, q: 'In which river was Jesus baptized?', correct: 'The Jordan', wrong: ['The Nile', 'The Euphrates'], ref: 'Matthew 3:13' },
+  { tier: 2, q: 'Who baptized Jesus?', correct: 'John the Baptist', wrong: ['Peter', 'Elijah'], ref: 'Matthew 3:13' },
+  { tier: 2, q: 'Which disciple would not believe until he saw Jesus\' wounds?', correct: 'Thomas', wrong: ['Philip', 'Andrew'], ref: 'John 20:24-29' },
+  { tier: 2, q: 'Which queen saved her people from wicked Haman?', correct: 'Esther', wrong: ['Ruth', 'Deborah'], ref: 'Esther 7' },
 
   // ---- tier 3: hard ----
   { tier: 3, q: 'In John 1, what was “in the beginning”?', correct: 'The Word', wrong: ['The Light', 'The Spirit'], ref: 'John 1:1' },
@@ -50,13 +81,64 @@ export const QUESTIONS: Question[] = [
   { tier: 3, q: 'Which king saw handwriting on the wall?', correct: 'Belshazzar', wrong: ['Nebuchadnezzar', 'Darius'], ref: 'Daniel 5' },
   { tier: 3, q: 'What is the shortest verse in the Bible (KJV)?', correct: 'Jesus wept.', wrong: ['Pray without ceasing.', 'Rejoice evermore.'], ref: 'John 11:35' },
   { tier: 3, q: 'Who interpreted Pharaoh’s dream of seven cows?', correct: 'Joseph', wrong: ['Daniel', 'Moses'], ref: 'Genesis 41' },
+  { tier: 3, q: 'Who was the mother of the prophet Samuel?', correct: 'Hannah', wrong: ['Naomi', 'Leah'], ref: '1 Samuel 1:20' },
+  { tier: 3, q: 'Which judge beat the Midianites with only 300 men?', correct: 'Gideon', wrong: ['Samson', 'Jephthah'], ref: 'Judges 7:7' },
+  { tier: 3, q: 'Which woman was a judge and prophetess of Israel?', correct: 'Deborah', wrong: ['Miriam', 'Huldah'], ref: 'Judges 4:4' },
+  { tier: 3, q: 'Who looked back and became a pillar of salt?', correct: 'Lot\'s wife', wrong: ['Noah\'s wife', 'Job\'s wife'], ref: 'Genesis 19:26' },
+  { tier: 3, q: 'What did Esau sell to Jacob for a bowl of stew?', correct: 'His birthright', wrong: ['His sheep', 'His coat'], ref: 'Genesis 25:33' },
+  { tier: 3, q: 'Who was raised from the dead after four days in the tomb?', correct: 'Lazarus', wrong: ['Jairus', 'Stephen'], ref: 'John 11:39-44' },
+  { tier: 3, q: 'Who was the first follower of Jesus to die for his faith?', correct: 'Stephen', wrong: ['James', 'Paul'], ref: 'Acts 7:59-60' },
+  { tier: 3, q: 'On which road did a bright light from heaven stop Saul?', correct: 'The road to Damascus', wrong: ['The road to Emmaus', 'The road to Jericho'], ref: 'Acts 9:3' },
+  { tier: 3, q: 'In which garden did Jesus pray the night he was arrested?', correct: 'Gethsemane', wrong: ['Eden', 'Golgotha'], ref: 'Matthew 26:36' },
+  { tier: 3, q: 'How many years did Israel wander in the wilderness?', correct: '40', wrong: ['7', '70'], ref: 'Numbers 14:33' },
+
+  // ---- tier 4: harder ----
+  { tier: 4, q: 'Who was the father of John the Baptist?', correct: 'Zechariah', wrong: ['Zebedee', 'Simeon'], ref: 'Luke 1:13' },
+  { tier: 4, q: 'Which boy king was 8 years old when he began to reign and found the Book of the Law?', correct: 'Josiah', wrong: ['Hezekiah', 'Joash'], ref: '2 Kings 22:1-8' },
+  { tier: 4, q: 'Which Roman governor sentenced Jesus to be crucified?', correct: 'Pontius Pilate', wrong: ['Herod Antipas', 'Felix'], ref: 'Matthew 27:2, 26' },
+  { tier: 4, q: 'What was Daniel\'s Babylonian name?', correct: 'Belteshazzar', wrong: ['Shadrach', 'Abednego'], ref: 'Daniel 1:7' },
+  { tier: 4, q: 'Who replaced Judas as one of the twelve apostles?', correct: 'Matthias', wrong: ['Barnabas', 'Silas'], ref: 'Acts 1:26' },
+  { tier: 4, q: 'Which prophet married Gomer as a picture of God’s faithful love?', correct: 'Hosea', wrong: ['Amos', 'Micah'], ref: 'Hosea 1:2-3' },
+  { tier: 4, q: 'What was the name of Abraham\'s nephew who traveled with him?', correct: 'Lot', wrong: ['Laban', 'Nahor'], ref: 'Genesis 12:5' },
+  { tier: 4, q: 'Which high priest questioned Jesus at his trial in Matthew?', correct: 'Caiaphas', wrong: ['Annas', 'Eli'], ref: 'Matthew 26:57' },
+  { tier: 4, q: 'Which book comes right after the four Gospels?', correct: 'Acts', wrong: ['Romans', 'Hebrews'], ref: 'Acts 1:1' },
+  { tier: 4, q: 'Which left-handed judge defeated King Eglon of Moab?', correct: 'Ehud', wrong: ['Othniel', 'Shamgar'], ref: 'Judges 3:15-21' },
+  { tier: 4, q: 'Which apostle worked as a tentmaker?', correct: 'Paul', wrong: ['Peter', 'Barnabas'], ref: 'Acts 18:3' },
+  { tier: 4, q: 'How many books are in the Protestant Bible?', correct: '66', wrong: ['73', '72'], ref: 'Genesis–Revelation' },
+  { tier: 4, q: 'On which mountain did Elijah face the prophets of Baal?', correct: 'Mount Carmel', wrong: ['Mount Sinai', 'Mount Hermon'], ref: '1 Kings 18:19-20' },
+
+  // ---- tier 5: expert ----
+  { tier: 5, q: 'What was the name of Moses\' wife?', correct: 'Zipporah', wrong: ['Miriam', 'Jochebed'], ref: 'Exodus 2:21' },
+  { tier: 5, q: 'What was the name of the mother of Moses?', correct: 'Jochebed', wrong: ['Zipporah', 'Miriam'], ref: 'Exodus 6:20' },
+  { tier: 5, q: 'What was the name of the servant whose ear Peter cut off?', correct: 'Malchus', wrong: ['Rufus', 'Mark'], ref: 'John 18:10' },
+  { tier: 5, q: 'Who was the father of King David?', correct: 'Jesse', wrong: ['Boaz', 'Obed'], ref: '1 Samuel 16:1' },
+  { tier: 5, q: 'Which judge made a vow that cost him his only daughter?', correct: 'Jephthah', wrong: ['Gideon', 'Samson'], ref: 'Judges 11:30-39' },
+  { tier: 5, q: 'What is the longest chapter in the Bible?', correct: 'Psalm 119', wrong: ['Psalm 23', 'Isaiah 53'], ref: 'Psalm 119' },
+  { tier: 5, q: 'Which king of Salem brought bread and wine and blessed Abram?', correct: 'Melchizedek', wrong: ['Abimelech', 'Chedorlaomer'], ref: 'Genesis 14:18-19' },
+  { tier: 5, q: 'How many people were saved in Noah\'s ark?', correct: '8', wrong: ['10', '12'], ref: '1 Peter 3:20' },
+  { tier: 5, q: 'Which prophet was told to lie on his side for 390 days?', correct: 'Ezekiel', wrong: ['Jeremiah', 'Isaiah'], ref: 'Ezekiel 4:4-5' },
+  { tier: 5, q: 'Who was Ruth\'s second husband?', correct: 'Boaz', wrong: ['Elimelech', 'Mahlon'], ref: 'Ruth 4:13' },
+  { tier: 5, q: 'Which old prophetess thanked God when she saw baby Jesus in the temple?', correct: 'Anna', wrong: ['Elizabeth', 'Lydia'], ref: 'Luke 2:36-38' },
+  { tier: 5, q: 'On which island was John when he received the vision of Revelation?', correct: 'Patmos', wrong: ['Malta', 'Cyprus'], ref: 'Revelation 1:9' },
+  { tier: 5, q: 'Who fell asleep and fell from a window during Paul\'s long talk?', correct: 'Eutychus', wrong: ['Tychicus', 'Trophimus'], ref: 'Acts 20:9' },
+  { tier: 5, q: 'What was the name of Sarai\'s Egyptian servant who became the mother of Ishmael?', correct: 'Hagar', wrong: ['Bilhah', 'Zilpah'], ref: 'Genesis 16:1, 15' },
 ];
 
-export function tierFor(level: number): 1 | 2 | 3 {
-  if (level >= 15) return 3;
-  if (level >= 10) return 2;
-  return 1;
+const MAX_TIER = 5;
+const clampTier = (t: number) => Math.max(1, Math.min(MAX_TIER, Math.floor(t))) as Tier;
+
+// Serpent level -> the tier its battle starts at (5 -> 1, 10 -> 2, 15 -> 3, 20 -> 4, 25+ -> 5)
+export function startTierFor(level: number): Tier {
+  return clampTier(level / 5);
 }
+
+// Question number (0, 1, 2 ...) -> its tier: one step harder every 2 questions
+export function tierForQuestion(level: number, index: number): Tier {
+  return clampTier(startTierFor(level) + Math.floor(index / 2));
+}
+
+// Old name, still used by other code
+export const tierFor = startTierFor;
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -67,12 +149,57 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-// Questions for one battle: mostly from this level's tier, a few easier ones mixed in.
-export function pickQuestions(level: number, count = 10): Question[] {
-  const tier = tierFor(level);
-  const main = shuffle(QUESTIONS.filter((q) => q.tier === tier));
-  const rest = shuffle(QUESTIONS.filter((q) => q.tier !== tier));
-  return [...main, ...rest].slice(0, count);
+// Questions for one battle, getting harder as it goes. `seen` = questions to avoid if possible.
+export function pickQuestions(level: number, count = 12, seen: Set<string> = new Set()): Question[] {
+  const out: Question[] = [];
+  const used = new Set<string>();
+  for (let i = 0; i < count; i++) {
+    const want = tierForQuestion(level, i);
+    // Try this tier first, then the nearest tiers if it runs out
+    const order = [want, want - 1, want + 1, want - 2, want + 2, want - 3, want + 3, want - 4, want + 4].filter(
+      (t) => t >= 1 && t <= MAX_TIER,
+    );
+    let picked: Question | undefined;
+    for (const t of order) {
+      const left = QUESTIONS.filter((q) => q.tier === t && !used.has(q.q));
+      if (!left.length) continue;
+      const fresh = left.filter((q) => !seen.has(q.q));
+      const pool = fresh.length ? fresh : left; // everything seen already: allow repeats
+      picked = pool[Math.floor(Math.random() * pool.length)];
+      break;
+    }
+    if (!picked) break;
+    used.add(picked.q);
+    out.push(picked);
+  }
+  return out;
+}
+
+// ---- Remember which questions this player has seen (on the phone) ----
+const seenKey = (username?: string) => `seenQuestions:${username ?? 'guest'}`;
+
+export async function loadSeen(username?: string): Promise<Set<string>> {
+  try {
+    const raw = await AsyncStorage.getItem(seenKey(username));
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    // Once every question of a tier has been seen, forget that tier so it can repeat
+    const seen = new Set(list);
+    for (let t = 1; t <= MAX_TIER; t++) {
+      const tierQs = QUESTIONS.filter((q) => q.tier === t);
+      if (tierQs.every((q) => seen.has(q.q))) tierQs.forEach((q) => seen.delete(q.q));
+    }
+    return seen;
+  } catch {
+    return new Set();
+  }
+}
+
+export async function markSeen(username: string | undefined, q: Question) {
+  try {
+    const seen = await loadSeen(username);
+    seen.add(q.q);
+    await AsyncStorage.setItem(seenKey(username), JSON.stringify([...seen]));
+  } catch {}
 }
 
 // The three answers in random order
