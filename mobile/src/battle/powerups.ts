@@ -13,6 +13,17 @@ export const POWERS: { key: PowerKey; name: string; info: string; icon: number }
   { key: 'fifty', name: 'Eliminate', info: 'Removes one wrong answer', icon: require('../../assets/images/power_fifty.png') },
 ];
 
+// Which power-up each pet usually gets (out of 100). The small ones are the rare pulls.
+//   donkey: Freeze Time is common
+//   lion:   Immunity is common
+//   Eliminate is rare for everyone
+export const POWER_ODDS: Record<string, Record<PowerKey, number>> = {
+  donkey: { freeze: 70, shield: 15, fifty: 15 },
+  lion: { shield: 70, freeze: 15, fifty: 15 },
+};
+const oddsFor = (petKey: string) => POWER_ODDS[petKey] ?? POWER_ODDS.donkey;
+export const isRarePower = (petKey: string, key: PowerKey) => oddsFor(petKey)[key] < 50;
+
 const EMPTY: PowerBag = { freeze: 0, shield: 0, fifty: 0 };
 const keyFor = (username?: string) => `powers:${username ?? 'guest'}`;
 
@@ -31,7 +42,15 @@ export async function savePowers(username: string | undefined, bag: PowerBag) {
   } catch {}
 }
 
-export function randomPower(): PowerKey {
-  const keys: PowerKey[] = ['freeze', 'shield', 'fifty'];
-  return keys[Math.floor(Math.random() * keys.length)];
+// Weighted pull, using this pet's odds
+export function randomPower(petKey = 'donkey'): PowerKey {
+  const odds = oddsFor(petKey);
+  const keys = Object.keys(odds) as PowerKey[];
+  const total = keys.reduce((sum, k) => sum + odds[k], 0);
+  let roll = Math.random() * total;
+  for (const k of keys) {
+    roll -= odds[k];
+    if (roll < 0) return k;
+  }
+  return keys[0];
 }

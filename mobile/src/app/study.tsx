@@ -22,7 +22,7 @@ import ExitModal from '../components/study/ExitModal';
 import FoodTray, { FoodCounts, FoodKind } from '../components/study/FoodTray';
 import TestPanel, { isTester, type TestGroup } from '../components/study/TestPanel';
 import { HungerBar, ProgressBar } from '../components/study/StatBars';
-import { fetchPetStatus, fetchNextReading, feedPet, restartPet } from '../api/auth';
+import { fetchPetStatus, fetchNextReading, feedPet, restartPet, completeReading } from '../api/auth';
 import {
   ADULT_LEVEL,
   ADULTS,
@@ -34,7 +34,10 @@ import {
   TEEN_LEVEL,
   TEENS,
   type Anim,
+  withNecklace,
 } from '../pets/forms';
+import DecorMenu from '../components/study/DecorMenu';
+import { DECOR, loadDecor, saveDecor, type DecorKey, type DecorState } from '../decor/items';
 import { loadPowers, savePowers } from '../battle/powerups';
 
 // A serpent ambushes the pet every 5 levels (Lv 5, 10, 15 ...)
@@ -87,6 +90,8 @@ const MOOD_LENGTH = { dance: 4300, read: 8000 };
 const WALL_W = 256;
 const WALL_H = 192;
 const FLOOR_RATIO = 512 / 224;
+// Room decorations are drawn at the same size as the room: 4 points per pixel-art pixel
+const ROOM_PX = 4;
 
 export default function Study() {
   const { username, userId, animalId: animalParam, from } = useLocalSearchParams<{
@@ -147,6 +152,22 @@ export default function Study() {
   // Test tools (only for test accounts, see TestPanel.tsx)
   const tester = isTester(username);
   const [testOpen, setTestOpen] = useState(false);
+
+  // Decorations won in battles (saved on the phone, per account)
+  const [decor, setDecor] = useState<DecorState>({ owned: [], used: [] });
+  const [decorOpen, setDecorOpen] = useState(false);
+  const necklaceOn = decor.used.includes('necklace');
+  useEffect(() => {
+    loadDecor(username).then(setDecor);
+  }, [username]);
+  const updateDecor = (next: DecorState) => {
+    setDecor(next);
+    saveDecor(username, next);
+  };
+  const toggleDecor = (key: DecorKey) => {
+    const used = decor.used.includes(key) ? decor.used.filter((k) => k !== key) : [...decor.used, key];
+    updateDecor({ ...decor, used });
+  };
 
   const loadStatus = async () => {
     if (!numericUserId) return;
@@ -365,10 +386,17 @@ export default function Study() {
     setReadingOpen(true);
   };
 
-  // DONE: reading earns a loaf of bread for the basket
-  const finishReading = () => {
+  // DONE: reading earns a loaf of bread, and the server moves to the next passage
+  const finishReading = async () => {
     if (readingBusy) return;
     setReadingBusy(true);
+    if (numericUserId && reading) {
+      try {
+        await completeReading(numericUserId);
+      } catch (err: any) {
+        console.warn('Saving reading failed:', err?.message);
+      }
+    }
     setFood((f) => ({ ...f, bread: f.bread + 1 }));
     setReading(null);
     setReadingOpen(false);
@@ -483,6 +511,8 @@ export default function Study() {
         { label: 'Serpent battle', onPress: () => startBattle(milestone) },
         { label: 'Serpent ambush', onPress: () => { setTestOpen(false); serpentAttacks(milestone); } },
         { label: 'Forget beaten serpents', onPress: () => setSerpentBeaten([]) },
+        { label: 'Get all decorations', onPress: () => updateDecor({ ...decor, owned: DECOR.map((d) => d.key) }) },
+        { label: 'Remove all decorations', onPress: () => updateDecor({ owned: [], used: [] }) },
         {
           label: '+1 each power-up',
           onPress: async () => {
@@ -583,7 +613,7 @@ export default function Study() {
 
   return (
     <Animated.View style={[styles.screen, { transform: [{ translateX: ambushShake }] }]}>
-      <PreloadSheets sheets={ALL_SHEETS} />
+      <PreloadSheets sheets={ALL_SHEETS.map((sh) => withNecklace(sh, necklaceOn))} />
 
       {/* Brick wall, tiled */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -608,6 +638,28 @@ export default function Study() {
           />
         ))}
       </View>
+
+      {/* Room decorations (fixed spots, behind the pet). 1 pixel-art pixel = 4 points, like the room. */}
+      {DECOR.filter((d) => d.group === 'room' && decor.used.includes(d.key)).map((d) => {
+        const w = d.art!.w * ROOM_PX;
+        const h = d.art!.h * ROOM_PX;
+        const floorTop = height - floorH;
+        const spot: Record<string, { left: number; top: number }> = {
+          door: { left: 10, top: floorTop + 4 - h },
+          window: { left: (width - w) / 2, top: insets.top + 175 },
+          frame_jesus: { left: 22, top: insets.top + 190 },
+          frame_scripture: { left: width - 22 - w, top: insets.top + 190 },
+          cross: { left: width - 66 - w / 2, top: insets.top + 318 },
+        };
+        return (
+          <Image
+            key={d.key}
+            source={d.icon}
+            pointerEvents="none"
+            style={{ position: 'absolute', width: w, height: h, ...spot[d.key] }}
+          />
+        );
+      })}
 
       {/* Top-left: name + bars */}
       <View style={[styles.hud, { top: insets.top + 24 }]}>
@@ -675,7 +727,7 @@ export default function Study() {
         >
           <Sprite
             key={animKey}
-            sheet={anim.sheet}
+            sheet={withNecklace(anim.sheet, necklaceOn)}
             ms={anim.ms}
             frameW={frameW}
             frameH={frameH}
@@ -731,6 +783,25 @@ export default function Study() {
       >
         <Image source={require('../../assets/images/icon_door.png')} style={styles.exitIcon} />
         <Text style={styles.menuLabel}>exit</Text>
+      </Pressable>
+
+      {/* Bottom-right: decorate menu */}
+      <Pressable
+        onPress={() => {
+          setTrayOpen(false);
+          setDecorOpen(true);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Decorate"
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.decorBtn,
+          { bottom: insets.bottom + 14, right: stage === 'baby' ? 88 : 16 },
+          pressed && { transform: [{ scale: 0.92 }] },
+        ]}
+      >
+        <Image source={require('../../assets/images/icon_decor.png')} style={styles.exitIcon} />
+        <Text style={styles.menuLabel}>decor</Text>
       </Pressable>
 
       {/* Bottom-right: food basket (only once hatched) */}
@@ -850,6 +921,14 @@ export default function Study() {
       ) : null}
 
       {/* Test tools: last, so they sit on top of everything */}
+      <DecorMenu
+        visible={decorOpen}
+        state={decor}
+        onToggle={toggleDecor}
+        onClose={() => setDecorOpen(false)}
+        note={petKey === 'lion' && form === 'adult' ? 'Your adult lion always wears his cross.' : undefined}
+      />
+
       <TestPanel visible={testOpen} groups={testGroups} info={testInfo} onClose={() => setTestOpen(false)} />
     </Animated.View>
   );
@@ -915,6 +994,7 @@ const styles = StyleSheet.create({
   exit: { position: 'absolute', left: 16, alignItems: 'center' },
   exitIcon: { width: 54, height: 54 },
   food: { position: 'absolute', right: 16, alignItems: 'center' },
+  decorBtn: { position: 'absolute', alignItems: 'center' },
   pop: { position: 'absolute', width: 100, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   popHeart: { width: 28, height: 28 },
   popText: {

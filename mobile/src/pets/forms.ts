@@ -212,3 +212,53 @@ export function animsFor(petKey: string, level: number): BabyAnims {
   const set = f === 'adult' ? ADULTS : f === 'teen' ? TEENS : BABIES;
   return set[petKey] ?? set.donkey;
 }
+
+// The same animations with the cross necklace drawn on, used when the pet wears it.
+// (The adult lion always wears his, so he isn't in this list.)
+const NECKLACE_PAIRS: [number, number][] = [
+  [require('../../assets/images/baby_idle.png'), require('../../assets/images/baby_idle_cross.png')],
+  [require('../../assets/images/baby_love.png'), require('../../assets/images/baby_love_cross.png')],
+  [require('../../assets/images/baby_hungry.png'), require('../../assets/images/baby_hungry_cross.png')],
+  [require('../../assets/images/baby_dance.png'), require('../../assets/images/baby_dance_cross.png')],
+  [require('../../assets/images/baby_read.png'), require('../../assets/images/baby_read_cross.png')],
+  [require('../../assets/images/eat_bread.png'), require('../../assets/images/eat_bread_cross.png')],
+  [require('../../assets/images/eat_water.png'), require('../../assets/images/eat_water_cross.png')],
+  [require('../../assets/images/eat_wine.png'), require('../../assets/images/eat_wine_cross.png')],
+  [require('../../assets/images/donkey_baby_die.png'), require('../../assets/images/donkey_baby_die_cross.png')],
+  [require('../../assets/images/lion_baby_idle.png'), require('../../assets/images/lion_baby_idle_cross.png')],
+  [require('../../assets/images/lion_baby_roar.png'), require('../../assets/images/lion_baby_roar_cross.png')],
+  [require('../../assets/images/lion_baby_hungry.png'), require('../../assets/images/lion_baby_hungry_cross.png')],
+  [require('../../assets/images/lion_baby_read.png'), require('../../assets/images/lion_baby_read_cross.png')],
+  [require('../../assets/images/lion_baby_eat_bread.png'), require('../../assets/images/lion_baby_eat_bread_cross.png')],
+  [require('../../assets/images/lion_baby_eat_water.png'), require('../../assets/images/lion_baby_eat_water_cross.png')],
+  [require('../../assets/images/lion_baby_eat_wine.png'), require('../../assets/images/lion_baby_eat_wine_cross.png')],
+  [require('../../assets/images/lion_baby_die.png'), require('../../assets/images/lion_baby_die_cross.png')],
+  [require('../../assets/images/donkey_idle.png'), require('../../assets/images/donkey_idle_cross.png')],
+  [require('../../assets/images/donkey_happy.png'), require('../../assets/images/donkey_happy_cross.png')],
+  [require('../../assets/images/donkey_hungry.png'), require('../../assets/images/donkey_hungry_cross.png')],
+  [require('../../assets/images/donkey_read.png'), require('../../assets/images/donkey_read_cross.png')],
+  [require('../../assets/images/donkey_eat_bread.png'), require('../../assets/images/donkey_eat_bread_cross.png')],
+  [require('../../assets/images/donkey_eat_water.png'), require('../../assets/images/donkey_eat_water_cross.png')],
+  [require('../../assets/images/donkey_eat_wine.png'), require('../../assets/images/donkey_eat_wine_cross.png')],
+  [require('../../assets/images/donkey_die.png'), require('../../assets/images/donkey_die_cross.png')],
+  [require('../../assets/images/donkey_adult_idle.png'), require('../../assets/images/donkey_adult_idle_cross.png')],
+  [require('../../assets/images/donkey_adult_happy.png'), require('../../assets/images/donkey_adult_happy_cross.png')],
+  [require('../../assets/images/donkey_adult_hungry.png'), require('../../assets/images/donkey_adult_hungry_cross.png')],
+  [require('../../assets/images/donkey_adult_read.png'), require('../../assets/images/donkey_adult_read_cross.png')],
+  [require('../../assets/images/donkey_adult_eat_bread.png'), require('../../assets/images/donkey_adult_eat_bread_cross.png')],
+  [require('../../assets/images/donkey_adult_eat_water.png'), require('../../assets/images/donkey_adult_eat_water_cross.png')],
+  [require('../../assets/images/donkey_adult_eat_wine.png'), require('../../assets/images/donkey_adult_eat_wine_cross.png')],
+  [require('../../assets/images/donkey_adult_die.png'), require('../../assets/images/donkey_adult_die_cross.png')],
+  [require('../../assets/images/lion_idle.png'), require('../../assets/images/lion_idle_cross.png')],
+  [require('../../assets/images/lion_happy.png'), require('../../assets/images/lion_happy_cross.png')],
+  [require('../../assets/images/lion_hungry.png'), require('../../assets/images/lion_hungry_cross.png')],
+  [require('../../assets/images/lion_read.png'), require('../../assets/images/lion_read_cross.png')],
+  [require('../../assets/images/lion_eat_bread.png'), require('../../assets/images/lion_eat_bread_cross.png')],
+  [require('../../assets/images/lion_eat_water.png'), require('../../assets/images/lion_eat_water_cross.png')],
+  [require('../../assets/images/lion_eat_wine.png'), require('../../assets/images/lion_eat_wine_cross.png')],
+  [require('../../assets/images/lion_die.png'), require('../../assets/images/lion_die_cross.png')],
+];
+const NECKLACE_SHEETS = new Map<number, number>(NECKLACE_PAIRS);
+
+// Swap a sheet for its necklace version when the necklace is on
+export const withNecklace = (sheet: number, on: boolean) => (on ? (NECKLACE_SHEETS.get(sheet) ?? sheet) : sheet);

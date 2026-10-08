@@ -4,9 +4,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Sprite, { PreloadSheets } from '../components/pets/Sprite';
-import { PET_BY_ANIMAL, PET_SCALE, animsFor, type Anim } from '../pets/forms';
+import { PET_BY_ANIMAL, PET_SCALE, animsFor, withNecklace, type Anim } from '../pets/forms';
 import { pickQuestions, choicesFor, type Question } from '../battle/questions';
-import { POWERS, loadPowers, savePowers, randomPower, type PowerBag, type PowerKey } from '../battle/powerups';
+import { POWERS, isRarePower, loadPowers, savePowers, type PowerBag, type PowerKey } from '../battle/powerups';
+import { rollReward, type Reward } from '../battle/rewards';
+import { decorItem, loadDecor, saveDecor, type DecorState } from '../decor/items';
 import { VICTORY_VERSES, COMFORT_VERSES, pickVerse, type Verse } from '../battle/verses';
 
 // ---------- Settings ----------
@@ -107,7 +109,10 @@ export default function Battle() {
   const [hidden, setHidden] = useState<string | null>(null); // answer removed by Eliminate
 
   // Result
-  const [reward, setReward] = useState<PowerKey | null>(null);
+  const [reward, setReward] = useState<Reward | null>(null);
+  // Decorations: what the player owns (for rewards) and whether the pet wears the necklace
+  const [decor, setDecor] = useState<DecorState>({ owned: [], used: [] });
+  const necklaceOn = decor.used.includes('necklace');
   const [verse, setVerse] = useState<Verse | null>(null);
 
   // ---------- Motion ----------
@@ -127,6 +132,7 @@ export default function Battle() {
 
   useEffect(() => {
     loadPowers(username).then(setBag);
+    loadDecor(username).then(setDecor);
   }, [username]);
 
   const shakeScreen = (power = 10) => {
@@ -185,10 +191,18 @@ export default function Battle() {
     setLog('The serpent is crushed!');
     setSerpentMove('defeat');
     later(1900, async () => {
-      const prize = randomPower();
-      const newBag = { ...bag, [prize]: bag[prize] + 1 };
-      setBag(newBag);
-      await savePowers(username, newBag);
+      // Lv 5: always a power-up. Higher serpents: sometimes a decoration, sometimes nothing.
+      const prize = rollReward(petKey, milestone, decor.owned);
+      if (prize.kind === 'power') {
+        const newBag = { ...bag, [prize.power]: bag[prize.power] + 1 };
+        setBag(newBag);
+        await savePowers(username, newBag);
+      } else if (prize.kind === 'decor') {
+        const latest = await loadDecor(username);
+        const next = { ...latest, owned: [...latest.owned.filter((k) => k !== prize.item), prize.item] };
+        setDecor(next);
+        await saveDecor(username, next);
+      }
       await saveResult(true);
       setReward(prize);
       setVerse(pickVerse(VICTORY_VERSES));
@@ -317,7 +331,7 @@ export default function Battle() {
   return (
     <View style={styles.screen}>
       <PreloadSheets
-        sheets={[...Object.values(SERPENT).map((a) => a.sheet), anims.idle.sheet, anims.tap.sheet, ...(anims.die ? [anims.die.anim.sheet] : [])]}
+        sheets={[...Object.values(SERPENT).map((a) => a.sheet), ...[anims.idle.sheet, anims.tap.sheet, ...(anims.die ? [anims.die.anim.sheet] : [])].map((sh) => withNecklace(sh, necklaceOn))]}
       />
       <Animated.View style={{ flex: 1, transform: [{ translateX: shake }] }}>
         {/* ---------- Arena ---------- */}
@@ -358,7 +372,7 @@ export default function Battle() {
           >
             <Sprite
               key={`${petKey}-${petMove}`}
-              sheet={petAnim.sheet}
+              sheet={withNecklace(petAnim.sheet, necklaceOn)}
               ms={petAnim.ms}
               frameW={petFrameW}
               frameH={petFrameH}
@@ -471,14 +485,43 @@ export default function Battle() {
               {phase === 'won' ? 'VICTORY!' : 'DEFEATED'}
             </Text>
 
-            {phase === 'won' && reward ? (
-              <View style={styles.rewardRow}>
-                <Image source={POWERS.find((p) => p.key === reward)!.icon} style={styles.rewardIcon} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rewardName}>+1 {POWERS.find((p) => p.key === reward)!.name}</Text>
-                  <Text style={styles.rewardInfo}>{POWERS.find((p) => p.key === reward)!.info}</Text>
-                </View>
-              </View>
+            {phase === 'won' && reward?.kind === 'power'
+              ? (() => {
+                  const won = POWERS.find((p) => p.key === reward.power)!;
+                  const rare = isRarePower(petKey, reward.power);
+                  return (
+                    <View style={[styles.rewardRow, rare && styles.rewardRare]}>
+                      <Image source={won.icon} style={styles.rewardIcon} />
+                      <View style={{ flex: 1 }}>
+                        {rare ? <Text style={styles.rareTag}>RARE PULL!</Text> : null}
+                        <Text style={styles.rewardName}>+1 {won.name}</Text>
+                        <Text style={styles.rewardInfo}>{won.info}</Text>
+                      </View>
+                    </View>
+                  );
+                })()
+              : null}
+
+            {phase === 'won' && reward?.kind === 'decor'
+              ? (() => {
+                  const item = decorItem(reward.item);
+                  return (
+                    <View style={[styles.rewardRow, styles.rewardRare]}>
+                      <Image source={item.icon} style={styles.rewardIcon} resizeMode="contain" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rareTag}>NEW DECORATION!</Text>
+                        <Text style={styles.rewardName}>{item.name}</Text>
+                        <Text style={styles.rewardInfo}>
+                          {item.group === 'clothes' ? 'Open DECOR in the study to put it on.' : 'Open DECOR in the study to hang it up.'}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })()
+              : null}
+
+            {phase === 'won' && reward?.kind === 'none' ? (
+              <Text style={styles.lossText}>The serpent left nothing behind this time. Stronger serpents give rarer rewards!</Text>
             ) : null}
 
             {phase === 'lost' ? (
@@ -589,6 +632,8 @@ const styles = StyleSheet.create({
   resultTitle: { fontFamily: 'Silkscreen_700Bold', fontSize: 28, textAlign: 'center', marginBottom: 14 },
   rewardRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: INK, padding: 10, marginBottom: 14 },
   rewardIcon: { width: 48, height: 48 },
+  rewardRare: { borderWidth: 3, borderColor: GOLD, backgroundColor: '#2A1E10' },
+  rareTag: { fontFamily: 'Silkscreen_700Bold', fontSize: 12, color: '#F2D27A', letterSpacing: 1, marginBottom: 2 },
   rewardName: { fontFamily: 'Silkscreen_700Bold', fontSize: 15, color: GOLD },
   rewardInfo: { fontFamily: 'Montserrat_500Medium', fontSize: 13, color: PARCHMENT, marginTop: 2 },
   lossText: { fontFamily: 'Montserrat_500Medium', fontSize: 14, color: PARCHMENT, textAlign: 'center', marginBottom: 14 },

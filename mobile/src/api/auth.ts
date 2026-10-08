@@ -1,4 +1,4 @@
-export const API_URL = 'http://192.168.0.101:8000';
+export const API_URL = 'http://192.168.0.144:8000';
 
 export type User = { 
   id: number; 
@@ -91,4 +91,10 @@ export async function feedPet(userId: number) {
 // Needs POST /api/pet/restart on the backend.
 export async function restartPet(userId: number) {
   return await post('/api/pet/restart', { user_id: userId });
+}
+
+// Player pressed DONE on a passage: the server moves them to the next one.
+// Needs POST /api/reading/complete on the backend.
+export async function completeReading(userId: number) {
+  return await post('/api/reading/complete', { user_id: userId });
 }
