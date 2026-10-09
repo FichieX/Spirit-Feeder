@@ -37,8 +37,8 @@ export type BabyAnims = {
 const DIE_MS = [150, 150, 150, 200, 160, 140, 140, 160, 260, 260, 300, 400, 400, 900];
 
 // Levels when the pet grows: baby -> teen (young) -> adult
-export const TEEN_LEVEL = 5;
-export const ADULT_LEVEL = 10;
+export const TEEN_LEVEL = 30;
+export const ADULT_LEVEL = 60;
 const READ_MS = [600, 600, 400, 600, 600, 180, 180, 800];
 const HUNGRY_MS = [500, 450, 450, 450, 400, 160, 160, 600];
 const BREAD_MS = [260, 200, 200, 200, 200, 200, 450, 650];
