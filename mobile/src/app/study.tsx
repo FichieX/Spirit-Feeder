@@ -576,6 +576,19 @@ export default function Study() {
       title: 'Battle',
       actions: [
         { label: 'Serpent battle', onPress: () => startBattle(milestone) },
+        { label: 'Verse battle', onPress: () => {
+  router.push({
+    pathname: '/verse-battle',
+    params: {
+      username: username ?? '',
+      userId: userId ?? '',
+      animalId: String(animalId),
+      level: String(level),
+      milestone: String(Math.max(5, Math.floor(level / 5) * 5)),
+      petName: petName || 'Your pet',
+    },
+  });
+}},
         { label: 'Serpent ambush', onPress: () => { setTestOpen(false); serpentAttacks(milestone); } },
         { label: 'Forget beaten serpents', onPress: () => setSerpentBeaten([]) },
         { label: 'Get all decorations', onPress: () => updateDecor({ ...decor, owned: DECOR.map((d) => d.key) }) },
