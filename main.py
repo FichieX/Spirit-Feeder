@@ -487,3 +487,6 @@ testing.setup(app, SessionLocal, User, level_from_xp, MAX_XP)
 
 import account
 account.setup(app, SessionLocal, User, Base, engine)
+
+import animal_battle
+animal_battle.setup(app, SessionLocal, User, Base, engine, level_from_xp, xp_for_level, MAX_XP)
