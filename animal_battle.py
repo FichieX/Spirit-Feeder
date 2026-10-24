@@ -1,3 +1,5 @@
+
+
 """
 Animal type chart and verse-based move system for Spirit Feeder.
 
@@ -13,6 +15,11 @@ from typing import Any, Dict, List
 from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, Integer, String
+
+from sqlalchemy.orm import declarative_base
+
+Base = declarative_base()
+
 
 ANIMAL_TYPE_CHART: Dict[str, Dict[str, Any]] = {
     "lion": {
