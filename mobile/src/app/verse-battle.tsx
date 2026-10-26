@@ -335,6 +335,13 @@ export default function VerseBattle() {
           {selectedMove ? (
             <View style={styles.challengeBox}>
               <Text style={styles.moveName}>{selectedMove.name}</Text>
+
+              <View style={styles.versePaper}>
+                <Text style={styles.versePreview}>
+                  {selectedMove.verseText ?? selectedMove.name}
+                </Text>
+              </View>
+
               <Text style={styles.help}>Reorder the verse itself, not the move name.</Text>
 
               <View style={styles.wordRow}>
@@ -550,5 +557,86 @@ const styles = StyleSheet.create({
   healthBarFillEnemy: {
     height: '100%',
     backgroundColor: '#ff8d6e',
+  },
+  challengeBox: {
+    backgroundColor: '#F0E1B2',
+    borderWidth: 3,
+    borderColor: '#1B1612',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+  },
+  moveName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#7A2626',
+    marginBottom: 8,
+  },
+  versePaper: {
+    backgroundColor: '#F9F2DB',
+    borderWidth: 2,
+    borderColor: '#1B1612',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  versePreview: {
+    color: '#3A281C',
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  help: {
+    color: '#5A3E2B',
+    marginBottom: 10,
+    fontWeight: '600',
+  },
+  wordRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  wordButton: {
+    backgroundColor: '#F2BE4A',
+    borderWidth: 2,
+    borderColor: '#8A6420',
+    borderBottomWidth: 4,
+    borderBottomColor: '#B07E1E',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    margin: 4,
+  },
+  wordText: {
+    color: '#1B1612',
+    fontWeight: '700',
+  },
+  progressLabel: {
+    marginTop: 10,
+    color: '#7A2626',
+    fontWeight: '700',
+  },
+  answerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  answerSlot: {
+    minWidth: 44,
+    minHeight: 36,
+    borderRadius: 8,
+    backgroundColor: '#E8D9B5',
+    borderWidth: 1,
+    borderColor: '#1B1612',
+    margin: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  answerSlotFilled: {
+    backgroundColor: '#9BCB4C',
+  },
+  answerText: {
+    color: '#1B1612',
+    fontWeight: '700',
   },
 });
