@@ -62,7 +62,7 @@ export default function VerseBattle() {
   const [selectedMove, setSelectedMove] = useState<BattleMove | null>(null);
   const [currentWords, setCurrentWords] = useState<string[]>([]);
   const [orderedWords, setOrderedWords] = useState<string[]>([]);
-  const [timer, setTimer] = useState(12);
+  const [timer, setTimer] = useState(30);
   const [round, setRound] = useState(1);
   const [availableMoves, setAvailableMoves] = useState<BattleMove[]>([]);
   const [selectedMoves, setSelectedMoves] = useState<BattleMove[]>([]);
@@ -127,7 +127,7 @@ export default function VerseBattle() {
     setSelectedMove(null);
     setCurrentWords([]);
     setOrderedWords([]);
-    setTimer(12);
+    setTimer(30);
   };
 
   const handleMiss = () => {
@@ -154,7 +154,7 @@ export default function VerseBattle() {
 
     setSelectedMove(move);
     setCurrentWords(scrambleWords(verseText));
-    setTimer(12);
+    setTimer(30);
     setLog(`Reorder the verse for: ${move.name}`);
   };
 
