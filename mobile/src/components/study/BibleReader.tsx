@@ -21,12 +21,62 @@ const TITLE = '#7A2626';
 const REF = '#8C7765';
 const GOLD = '#D9A441';
 
-// Books we flip past on the way to John
-const FLIP_BOOKS = ['GENESIS', 'EXODUS', 'PSALMS', 'PROVERBS', 'ISAIAH', 'MATTHEW', 'MARK', 'LUKE', 'JOHN'];
+// All 66 books in Bible order. When the Bible opens, the pages flip from Genesis
+// to whichever book today's passage is in.
+const BIBLE_BOOKS = [
+  'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
+  '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah',
+  'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon', 'Isaiah', 'Jeremiah',
+  'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum',
+  'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi',
+  'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians', '2 Corinthians', 'Galatians',
+  'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians', '1 Timothy',
+  '2 Timothy', 'Titus', 'Philemon', 'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John',
+  '3 John', 'Jude', 'Revelation',
+];
+const GOSPELS = ['Matthew', 'Mark', 'Luke', 'John'];
+const MAX_FLIPS = 8; // pages turned on the way to the book
+
+// "psalm" -> "Psalms", "song of songs" -> "Song of Solomon", anything else matched by name
+function normalizeBook(raw: string) {
+  const b = raw.trim().replace(/\s+/g, ' ');
+  const low = b.toLowerCase();
+  if (low === 'psalm') return 'Psalms';
+  if (low === 'song of songs') return 'Song of Solomon';
+  return BIBLE_BOOKS.find((x) => x.toLowerCase() === low) ?? b;
+}
+
+// Which book the passage is from: the server sends it, otherwise read it from the
+// reference ("Genesis 1:6-8" -> Genesis). The offline fallback passage is John.
+function bookOf(serverBook: string | undefined, ref: string) {
+  if (serverBook && serverBook.trim()) return normalizeBook(serverBook);
+  const m = ref.match(/^((?:[1-3]\s)?[A-Za-z][A-Za-z ]*?)\s+\d+(?::|$)/);
+  return m ? normalizeBook(m[1]) : 'John';
+}
+
+// Heading on the first page: THE GOSPEL OF JOHN, THE BOOK OF GENESIS, THE SONG OF SOLOMON...
+function bookHeading(book: string) {
+  if (GOSPELS.includes(book)) return `THE GOSPEL OF ${book.toUpperCase()}`;
+  if (book === 'Song of Solomon') return 'THE SONG OF SOLOMON';
+  return `THE BOOK OF ${book.toUpperCase()}`;
+}
+
+// Book names shown while the pages flip, from Genesis up to the passage's book
+function flipBooks(book: string) {
+  const end = BIBLE_BOOKS.indexOf(book);
+  if (end < 0) return ['GENESIS', book.toUpperCase()]; // unknown book name: still lands on it
+  const steps = Math.min(end, MAX_FLIPS);
+  const out: string[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const name = BIBLE_BOOKS[steps ? Math.round((i * end) / steps) : 0].toUpperCase();
+    if (out[out.length - 1] !== name) out.push(name);
+  }
+  return out;
+}
 
 const FONT_SIZE = 15;
 const LINE_H = 23;
-const HEADER_H = 106; // space for book name + title + reference on the first page
+const HEADER_H = 106; // space for book name + title + reference on the first page (grows if a long book name wraps)
 
 // Used when the server can't be reached (John 1:1-5, KJV)
 const FALLBACK = {
@@ -36,7 +86,7 @@ const FALLBACK = {
     'In the beginning was the Word, and the Word was with God, and the Word was God. The same was in the beginning with God. All things were made by him; and without him was not any thing made that was made. In him was life; and the life was the light of men. And the light shineth in darkness; and the darkness comprehended it not.',
 };
 
-export type Reading = { chapter?: number; title: string; content: string } | null;
+export type Reading = { book?: string; chapter?: number; title: string; content: string } | null;
 
 type Props = {
   visible: boolean;
@@ -54,12 +104,16 @@ function splitTitle(title: string) {
   return m ? { name: m[1], ref: m[2] } : { name: title, ref: '' };
 }
 
-// The Bible: closed cover -> opens -> pages flip to John -> read page by page -> DONE
+// The Bible: closed cover -> opens -> pages flip to the passage's book -> read page by page -> DONE
 export default function BibleReader({ visible, reading, busy, onDone, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const passage = reading ?? FALLBACK;
+  const passage: NonNullable<Reading> = reading ?? FALLBACK;
   const { name, ref } = splitTitle(passage.title);
+  const book = bookOf(passage.book, ref);
+  const heading = bookHeading(book);
+  const refText = ref || `${book} ${passage.chapter ?? 1}`;
+  const flips = useMemo(() => flipBooks(book), [book]);
 
   // Book size: as big as fits between the close button and the buttons at the bottom
   const availH = height - insets.top - insets.bottom - 130;
@@ -70,14 +124,16 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
   const coverH = (coverW * 136) / 92;
 
   const [phase, setPhase] = useState<Phase>('cover');
-  const [bookName, setBookName] = useState(FLIP_BOOKS[0]);
+  const [bookName, setBookName] = useState(flips[0]);
   const [spread, setSpread] = useState(0);
   const [lines, setLines] = useState<string[] | null>(null);
+  const [headH, setHeadH] = useState<number | null>(null); // measured height of the first-page heading
+  const ready = !!lines && headH !== null;
 
   const coverTurn = useRef(new Animated.Value(0)).current; // 0 closed -> 1 open
   const bookFade = useRef(new Animated.Value(0)).current;
   const pageTurn = useRef(new Animated.Value(0)).current; // 0 flat -> 1 turned over
-  const flipping = useRef(false); // true while flipping to John (tap to skip)
+  const flipping = useRef(false); // true while flipping to the book (tap to skip)
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearTimers = () => {
     timers.current.forEach(clearTimeout);
@@ -91,8 +147,9 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
     clearTimers();
     setPhase('cover');
     setSpread(0);
-    setBookName(FLIP_BOOKS[0]);
+    setBookName(flips[0]);
     setLines(null);
+    setHeadH(null);
     coverTurn.setValue(0);
     bookFade.setValue(0);
     pageTurn.setValue(0);
@@ -102,14 +159,15 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
   // ---- Pages: measure the passage in a hidden Text, then cut its lines into pages ----
   const colW = LEFT_COL.w * k;
   const colH = LEFT_COL.h * k;
+  const headerBox = Math.max(HEADER_H, (headH ?? 0) + 6);
   const pages = useMemo(() => {
-    if (!lines) return [] as string[][];
+    if (!lines || headH === null) return [] as string[][];
     const perPage = Math.max(3, Math.floor(colH / LINE_H));
-    const first = Math.max(2, Math.floor((colH - HEADER_H) / LINE_H));
+    const first = Math.max(2, Math.floor((colH - headerBox) / LINE_H));
     const out: string[][] = [lines.slice(0, first)];
     for (let i = first; i < lines.length; i += perPage) out.push(lines.slice(i, i + perPage));
     return out;
-  }, [lines, colH]);
+  }, [lines, headH, headerBox, colH]);
   const spreads = Math.max(1, Math.ceil(pages.length / 2));
   const lastSpread = spread >= spreads - 1;
 
@@ -120,7 +178,7 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
     Animated.sequence([
       Animated.timing(coverTurn, { toValue: 1, duration: 450, easing: Easing.in(Easing.quad), useNativeDriver: true }),
       Animated.timing(bookFade, { toValue: 1, duration: 250, useNativeDriver: true }),
-    ]).start(() => flipToJohn());
+    ]).start(() => flipToBook());
   };
 
   const turnPage = (onMiddle?: () => void, ms = 170) =>
@@ -133,12 +191,12 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
       if (onMiddle) timers.current.push(setTimeout(onMiddle, ms / 2));
     });
 
-  const flipToJohn = async () => {
+  const flipToBook = async () => {
     setPhase('flipping');
     flipping.current = true;
-    for (let i = 1; i < FLIP_BOOKS.length; i++) {
+    for (let i = 1; i < flips.length; i++) {
       if (!flipping.current) return; // skipped
-      await turnPage(() => setBookName(FLIP_BOOKS[i]), 150);
+      await turnPage(() => setBookName(flips[i]), 150);
     }
     flipping.current = false;
     setPhase('reading');
@@ -155,7 +213,7 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
       pageTurn.setValue(0);
       coverTurn.setValue(1);
       bookFade.setValue(1);
-      setBookName('JOHN');
+      setBookName(flips[flips.length - 1]);
       setPhase('reading');
     }
   };
@@ -176,6 +234,21 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
     height: b.h * k,
   });
 
+  // Book name + passage name + reference at the top of the first page
+  const Heading = () => (
+    <>
+      <Text style={styles.book} numberOfLines={2}>
+        {heading}
+      </Text>
+      <Text style={styles.title} numberOfLines={3} adjustsFontSizeToFit>
+        {name}
+      </Text>
+      <Text style={styles.ref} numberOfLines={1}>
+        {refText}
+      </Text>
+    </>
+  );
+
   const PageText = ({ index }: { index: number }) => {
     const ls = pages[index];
     const pageNo = index + 1;
@@ -191,12 +264,8 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
     return (
       <View style={{ flex: 1 }}>
         {index === 0 ? (
-          <View style={{ height: HEADER_H }}>
-            <Text style={styles.book}>{`THE GOSPEL OF ${bookName}`}</Text>
-            <Text style={styles.title} numberOfLines={3} adjustsFontSizeToFit>
-              {name}
-            </Text>
-            <Text style={styles.ref}>{ref || `John ${passage.chapter ?? 1}`}</Text>
+          <View style={{ height: headerBox }}>
+            <Heading />
           </View>
         ) : null}
         {ls.map((l, i) => (
@@ -234,19 +303,29 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
             {passage.content}
           </Text>
         ) : null}
+        {/* Hidden measurer for the heading: a long book name can take two lines */}
+        {visible && headH === null ? (
+          <View
+            pointerEvents="none"
+            style={{ position: 'absolute', width: colW, opacity: 0, left: -9999 }}
+            onLayout={(e) => setHeadH(e.nativeEvent.layout.height)}
+          >
+            <Heading />
+          </View>
+        ) : null}
 
         <Pressable style={styles.stage} onPress={skip} disabled={phase === 'reading'} accessibilityLabel="Open the Bible">
           {/* The open book */}
           <Animated.View
             style={{ width: bookW, height: bookH, opacity: bookFade, transform: [{ scale: bookFade.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }] }}
             accessible={phase === 'reading'}
-            accessibilityLabel={`${name}. ${ref}. ${passage.content}`}
+            accessibilityLabel={`${heading}. ${name}. ${refText}. ${passage.content}`}
           >
             <Image source={SPREAD} style={{ width: bookW, height: bookH }} />
 
             {/* Left page */}
             <Pressable style={at(LEFT_COL)} onPress={() => go(-1)} disabled={phase !== 'reading'}>
-              {phase === 'reading' && lines ? (
+              {phase === 'reading' && ready ? (
                 <PageText index={leftIndex} />
               ) : (
                 <View style={{ paddingTop: 6 }}>
@@ -257,7 +336,7 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
 
             {/* Right page */}
             <Pressable style={at(RIGHT_COL)} onPress={() => go(1)} disabled={phase !== 'reading'}>
-              {phase === 'reading' && lines ? <PageText index={rightIndex} /> : null}
+              {phase === 'reading' && ready ? <PageText index={rightIndex} /> : null}
             </Pressable>
 
             {/* The page that turns (around the spine) */}
