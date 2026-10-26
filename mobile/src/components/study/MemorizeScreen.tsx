@@ -33,7 +33,6 @@ import {
   loadUnlockedVerseMoves,
   saveUnlockedVerseMoves,
   unlockVerseMoveForPlayer,
-  type VerseMove,
 } from '../../battle/verseMoves';
 
 const BG = '#2B211B';
@@ -72,7 +71,17 @@ type Session = {
   mistakes: number;
 };
 
-type Result = { kind: Kind; water: boolean; waterFull: boolean; xp: number | null; xpError: string; leveledUp: boolean; mistakes: number; nextDays: number | null; xpFull: boolean };
+type Result = {
+  kind: Kind;
+  water: boolean;
+  waterFull: boolean;
+  xp: number | null;
+  xpError: string;
+  leveledUp: boolean;
+  mistakes: number;
+  nextDays: number | null;
+  xpFull: boolean;
+};
 
 type MemorizeMode = 'random' | 'animal';
 
@@ -198,12 +207,11 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
 
       if (move) {
         const unlocked = await loadUnlockedVerseMoves(username);
-        const unlockedMove = await unlockVerseMoveForPlayer(username, selectedAnimal, move);
-        const existing = unlocked[unlockedMove.id];
-        if (existing && existing.moveKey === move.key) {
-          if (Object.keys(unlocked).length >= 0) {
-            // no-op
-          }
+        const existing = unlocked[`${selectedAnimal}:${move.key}`];
+
+        if (!existing) {
+          const unlockedMove = await unlockVerseMoveForPlayer(username, selectedAnimal, move);
+          const _ = unlockedMove;
         }
       }
     }

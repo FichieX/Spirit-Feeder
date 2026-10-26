@@ -67,10 +67,7 @@ export const getUnlockedMovesForAnimal = (moves: VerseMoveMap, animalKey: Animal
 export const getUnlockedMoveCount = (moves: VerseMoveMap, animalKey: AnimalKey) =>
   getUnlockedMovesForAnimal(moves, animalKey).length;
 
-export const canStartVerseBattle = (moves: VerseMoveMap) => {
-  const total = Object.keys(moves).length;
-  return total > 0;
-};
+export const canStartVerseBattle = (moves: VerseMoveMap) => Object.keys(moves).length > 0;
 
 export const hasAnyUnlockedMoves = (moves: VerseMoveMap) => Object.keys(moves).length > 0;
 
@@ -81,10 +78,9 @@ export const unlockVerseMoveForPlayer = async (
 ) => {
   const current = await loadUnlockedVerseMoves(username);
   const entry = buildVerseMove(animalKey, move);
-  const key = entry.id;
-  current[key] = entry;
+  current[entry.id] = entry;
   await saveUnlockedVerseMoves(username, current);
-  return current[key];
+  return current[entry.id];
 };
 
 export const selectBattleMoves = (moves: VerseMove[], count = MAX_SELECTED_MOVES_PER_BATTLE) => {

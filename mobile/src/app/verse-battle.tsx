@@ -91,6 +91,7 @@ export default function VerseBattle() {
       setSelectedMoves(baseMoves);
       setSelectionOpen(false);
     } else {
+      setSelectedMoves([]);
       setSelectionOpen(true);
     }
 
@@ -205,11 +206,14 @@ export default function VerseBattle() {
         resetTurn();
         setRound((r) => r + 1);
 
-        if (enemyHp - playerDamage.damage <= 0) {
+        const afterPlayer = enemyHp - playerDamage.damage;
+        const afterEnemy = playerHp - cpuDamage.damage;
+
+        if (afterPlayer <= 0) {
           setBattleEnded(true);
           Alert.alert('Victory!', `${petName} defeated the ${ANIMAL_TYPES[enemyKey].name}.`);
           router.back();
-        } else if (playerHp <= cpuDamage.damage) {
+        } else if (afterEnemy <= 0) {
           setBattleEnded(true);
           Alert.alert('Defeat', `${petName} was overwhelmed. Try another round.`);
           router.back();
@@ -219,8 +223,8 @@ export default function VerseBattle() {
   };
 
   const toggleSelectedMove = (move: BattleMove) => {
-    if (selectedMoves.some((item) => item.key === move.key)) {
-      setSelectedMoves((prev) => prev.filter((item) => item.key !== move.key));
+    if (selectedMoves.some((m) => m.key === move.key)) {
+      setSelectedMoves((prev) => prev.filter((m) => m.key !== move.key));
       return;
     }
 
@@ -232,8 +236,7 @@ export default function VerseBattle() {
     setSelectedMoves((prev) => [...prev, move]);
   };
 
-  const playerMaxHp = getAnimalMaxHealth(playerLevel, petKey);
-  const enemyMaxHp = getAnimalMaxHealth(milestone, enemyKey);
+  const canStartBattle = selectedMoves.length === 4;
 
   return (
     <View style={styles.screen}>
@@ -254,7 +257,7 @@ export default function VerseBattle() {
                 onPress={() => toggleSelectedMove(move)}
                 style={[
                   styles.moveCard,
-                  selectedMoves.some((item) => item.key === move.key) && styles.selectedMoveCard,
+                  selectedMoves.some((m) => m.key === move.key) && styles.selectedMoveCard,
                 ]}
               >
                 <Text style={styles.moveTitle}>{move.name}</Text>
@@ -268,15 +271,20 @@ export default function VerseBattle() {
           </View>
 
           <Pressable
-            style={styles.confirmButton}
+            disabled={!canStartBattle}
             onPress={() => {
-              if (selectedMoves.length === 0) {
-                Alert.alert('Verse battle', 'Choose at least 1 move before starting.');
+              if (!canStartBattle) {
+                Alert.alert('Verse battle', 'Select exactly 4 moves before starting.');
                 return;
               }
+
               setSelectionOpen(false);
               setLog('Battle started. Reorder the verse to attack.');
             }}
+            style={[
+              styles.confirmButton,
+              !canStartBattle && styles.confirmButtonDisabled,
+            ]}
           >
             <Text style={styles.confirmButtonText}>Start battle</Text>
           </Pressable>
@@ -289,14 +297,14 @@ export default function VerseBattle() {
             <View style={styles.hpBlock}>
               <Text style={styles.hpLabel}>{petName}</Text>
               <Text style={styles.hpValue}>
-                {Math.max(0, Math.round(playerHp))}/{playerMaxHp}
+                {Math.max(0, Math.round(playerHp))}/{getAnimalMaxHealth(playerLevel, petKey)}
               </Text>
               <View style={styles.healthBarTrack}>
                 <View
                   style={[
                     styles.healthBarFill,
                     {
-                      width: `${Math.max(0, Math.min(100, (playerHp / playerMaxHp) * 100))}%`,
+                      width: `${Math.max(0, Math.min(100, (playerHp / getAnimalMaxHealth(playerLevel, petKey)) * 100))}%`,
                     },
                   ]}
                 />
@@ -306,14 +314,14 @@ export default function VerseBattle() {
             <View style={styles.hpBlock}>
               <Text style={styles.hpLabel}>{ANIMAL_TYPES[enemyKey].name}</Text>
               <Text style={styles.hpValue}>
-                {Math.max(0, Math.round(enemyHp))}/{enemyMaxHp}
+                {Math.max(0, Math.round(enemyHp))}/{getAnimalMaxHealth(milestone, enemyKey)}
               </Text>
               <View style={styles.healthBarTrack}>
                 <View
                   style={[
                     styles.healthBarFillEnemy,
                     {
-                      width: `${Math.max(0, Math.min(100, (enemyHp / enemyMaxHp) * 100))}%`,
+                      width: `${Math.max(0, Math.min(100, (enemyHp / getAnimalMaxHealth(milestone, enemyKey)) * 100))}%`,
                     },
                   ]}
                 />
@@ -464,65 +472,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 10,
   },
-  challengeBox: {
-    backgroundColor: '#3b2c29',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-  },
-  moveName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#f7d56d',
-    marginBottom: 6,
-  },
-  help: {
-    color: '#e6d6b3',
-    marginBottom: 8,
-  },
-  wordRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  wordButton: {
-    backgroundColor: '#8d5e34',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    margin: 4,
-  },
-  wordText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  progressLabel: {
-    marginTop: 10,
-    color: '#f5d98b',
-    fontWeight: '700',
-  },
-  answerRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 8,
-  },
-  answerSlot: {
-    minWidth: 44,
-    minHeight: 36,
-    borderRadius: 8,
-    backgroundColor: '#1d1a1b',
-    margin: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  answerSlotFilled: {
-    backgroundColor: '#468c52',
-  },
-  answerText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  moveGrid: {
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
@@ -565,6 +515,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 12,
+  },
+  confirmButtonDisabled: {
+    opacity: 0.5,
   },
   confirmButtonText: {
     color: '#1a120d',
