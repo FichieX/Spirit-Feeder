@@ -24,8 +24,18 @@ import {
   type Verse,
 } from '../../memorize/verses';
 import { completeMemorize, fetchMemorizeToday } from '../../api/memorize';
+import {
+  ANIMAL_TYPES,
+  getAnimalMoves,
+  type AnimalKey,
+} from '../../battle/animals';
+import {
+  loadUnlockedVerseMoves,
+  saveUnlockedVerseMoves,
+  unlockVerseMoveForPlayer,
+  type VerseMove,
+} from '../../battle/verseMoves';
 
-// ---------- Colors ----------
 const BG = '#2B211B';
 const CARD = '#3D2B22';
 const INK = '#1B1612';
@@ -37,7 +47,6 @@ const DIM = '#8C7765';
 const GREEN = '#5E8A4A';
 const WATER = require('../../../assets/images/food_water.png');
 
-// The four steps for one verse
 const STEPS = ['Read it', 'Fill a few words', 'Fill more words', 'Put the words in order'];
 
 type Props = {
@@ -45,41 +54,45 @@ type Props = {
   username?: string;
   userId: number;
   onClose: () => void;
-  onWater: () => void; // +1 water into the food basket
-  onXp: (gained: number) => void; // XP was added on the server
+  onWater: () => void;
+  onXp: (gained: number) => void;
 };
 
 type Session = {
   verse: Verse;
   kind: Kind;
   tokens: Token[];
-  step: number; // 0..3
-  round1: number[]; // blanks in step 1 (they stay hidden in step 2)
-  blanks: number[]; // blanks in the current step
-  filled: number; // how many blanks are filled so far
+  step: number;
+  round1: number[];
+  blanks: number[];
+  filled: number;
   choices: string[];
   tiles: { id: number; text: string }[];
-  built: number[]; // token indexes placed in step 3
+  built: number[];
   mistakes: number;
 };
 
 type Result = { kind: Kind; water: boolean; waterFull: boolean; xp: number | null; xpError: string; leveledUp: boolean; mistakes: number; nextDays: number | null; xpFull: boolean };
 
-// Verse memorization: review due verses, learn the next new one, or practice for XP
+type MemorizeMode = 'random' | 'animal';
+
 export default function MemorizeScreen({ visible, username, userId, onClose, onWater, onXp }: Props) {
   const insets = useSafeAreaInsets();
   const [mem, setMem] = useState<MemoryState | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
-  // Memorize XP today (the server allows about one level of XP a day)
   const [xpToday, setXpToday] = useState<{ today: number; limit: number } | null>(null);
+  const [memorizeMode, setMemorizeMode] = useState<MemorizeMode | null>(null);
+  const [selectedAnimal, setSelectedAnimal] = useState<AnimalKey | null>(null);
   const shake = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!visible) return;
     setSession(null);
     setResult(null);
+    setMemorizeMode(null);
+    setSelectedAnimal(null);
     loadMemory(username).then(setMem);
     if (userId) {
       fetchMemorizeToday(userId)
@@ -100,7 +113,6 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
     setSession((s) => (s ? { ...s, mistakes: s.mistakes + 1 } : s));
   };
 
-  // ---------- Start / steps ----------
   const start = (verse: Verse, kind: Kind) => {
     const tokens = tokenize(verse.text);
     setResult(null);
@@ -138,7 +150,6 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
   const pickTile = (tile: { id: number; text: string }) => {
     if (!session) return;
     const wantIdx = session.built.length;
-    // Any tile with the same text counts (a verse can repeat a word)
     if (tile.text !== session.tokens[wantIdx].full) return wrong();
     const built = [...session.built, wantIdx];
     const tiles = session.tiles.filter((t) => t.id !== tile.id);
@@ -150,20 +161,24 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
     }
   };
 
-  // ---------- Finish: save progress, water, XP ----------
   const finish = async (s: Session) => {
     if (!mem || busy) return;
     setBusy(true);
+
     const { state, water } = finishVerse(mem, s.verse.ref, s.kind);
     setMem(state);
     await saveMemory(username, state);
+
     if (water) onWater();
+
     const p = state.verses[s.verse.ref];
     const nextDays = s.kind === 'practice' ? null : REVIEW_DAYS[Math.min(p.stage, REVIEW_DAYS.length - 1)];
+
     let xp: number | null = null;
     let xpError = '';
     let leveledUp = false;
     let xpFull = false;
+
     if (userId) {
       try {
         const r = await completeMemorize(userId, s.verse.ref, s.kind);
@@ -176,11 +191,37 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
         xpError = err?.message || 'No XP this time.';
       }
     }
-    setResult({ kind: s.kind, water, waterFull: s.kind !== 'practice' && !water, xp, xpError, leveledUp, mistakes: s.mistakes, nextDays, xpFull });
+
+    if (memorizeMode === 'animal' && selectedAnimal) {
+      const moveList = getAnimalMoves(selectedAnimal);
+      const move = moveList.find((m) => (m.verseText ?? m.name) === s.verse.text || m.verse_ref === s.verse.ref);
+
+      if (move) {
+        const unlocked = await loadUnlockedVerseMoves(username);
+        const unlockedMove = await unlockVerseMoveForPlayer(username, selectedAnimal, move);
+        const existing = unlocked[unlockedMove.id];
+        if (existing && existing.moveKey === move.key) {
+          if (Object.keys(unlocked).length >= 0) {
+            // no-op
+          }
+        }
+      }
+    }
+
+    setResult({
+      kind: s.kind,
+      water,
+      waterFull: s.kind !== 'practice' && !water,
+      xp,
+      xpError,
+      leveledUp,
+      mistakes: s.mistakes,
+      nextDays,
+      xpFull,
+    });
     setBusy(false);
   };
 
-  // ---------- Pieces ----------
   const VerseText = ({ s }: { s: Session }) => {
     const hidden = new Set(s.step === 3 ? s.tokens.map((_, i) => i) : s.blanks);
     const current = s.step === 1 || s.step === 2 ? s.blanks[s.filled] : s.step === 3 ? s.built.length : -1;
@@ -233,7 +274,43 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
     );
   };
 
-  // ---------- Screens ----------
+  const animalOptions: AnimalKey[] = ['lion', 'donkey', 'camel', 'raven', 'dove', 'fish'];
+
+  const modeSelection = (
+    <View style={{ padding: 16, paddingBottom: insets.bottom + 30 }}>
+      <Text style={styles.title}>VERSE MEMORISATION</Text>
+      <Text style={styles.sub}>Choose the mode</Text>
+
+      <Pressable
+        onPress={() => setMemorizeMode('random')}
+        style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
+      >
+        <Text style={styles.primaryText}>1. Memorise a random Bible verse</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => {
+          setMemorizeMode('animal');
+          setSelectedAnimal('lion');
+        }}
+        style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
+      >
+        <Text style={styles.primaryText}>2. Memorise an animal battle move verse</Text>
+      </Pressable>
+
+      <Text style={styles.section}>Choose animal</Text>
+      {animalOptions.map((animal) => (
+        <Pressable
+          key={animal}
+          onPress={() => setSelectedAnimal(animal)}
+          style={({ pressed }) => [styles.optionButton, pressed && styles.pressed, selectedAnimal === animal && styles.optionButtonSelected]}
+        >
+          <Text style={styles.optionButtonText}>{ANIMAL_TYPES[animal].name}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
   const hub = (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 30 }}>
       <Text style={styles.title}>MEMORIZE</Text>
@@ -270,17 +347,38 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
         </>
       ) : null}
 
-      <Text style={styles.section}>NEW VERSE</Text>
-      {next ? <Row v={next} label="LEARN" kind="new" /> : <Text style={styles.empty}>You've learned every verse! Keep reviewing to master them.</Text>}
-
-      {practice.length ? (
+      {memorizeMode === 'random' || memorizeMode === 'animal' ? (
         <>
-          <Text style={styles.section}>PRACTICE (XP ONLY)</Text>
-          {practice.map((v) => (
-            <Row key={v.ref} v={v} label="PRACTICE" kind="practice" />
-          ))}
+          <Text style={styles.section}>
+            {memorizeMode === 'random' ? 'RANDOM VERSE' : `ANIMAL MOVE VERSES: ${ANIMAL_TYPES[selectedAnimal ?? 'lion'].name}`}
+          </Text>
+          {memorizeMode === 'random'
+            ? VERSES.map((v) => <Row key={v.ref} v={v} label="LEARN" kind="new" />)
+            : selectedAnimal
+              ? getAnimalMoves(selectedAnimal).map((move) => (
+                  <Row
+                    key={move.key}
+                    v={{ ref: move.verse_ref, text: move.verseText ?? move.name }}
+                    label="LEARN"
+                    kind="new"
+                  />
+                ))
+              : null}
         </>
-      ) : null}
+      ) : (
+        <>
+          <Text style={styles.section}>NEW VERSE</Text>
+          {next ? <Row v={next} label="LEARN" kind="new" /> : <Text style={styles.empty}>You've learned every verse! Keep reviewing to master them.</Text>}
+          {practice.length ? (
+            <>
+              <Text style={styles.section}>PRACTICE (XP ONLY)</Text>
+              {practice.map((v) => (
+                <Row key={v.ref} v={v} label="PRACTICE" kind="practice" />
+              ))}
+            </>
+          ) : null}
+        </>
+      )}
     </ScrollView>
   );
 
@@ -372,11 +470,6 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
         ) : null}
       </View>
 
-      {next && result.kind !== 'practice' ? (
-        <Pressable onPress={() => start(next, 'new')} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
-          <Text style={styles.primaryText}>NEXT VERSE</Text>
-        </Pressable>
-      ) : null}
       <Pressable onPress={() => start(session.verse, 'practice')} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
         <Text style={styles.secondaryText}>PRACTICE AGAIN (XP)</Text>
       </Pressable>
@@ -407,7 +500,8 @@ export default function MemorizeScreen({ visible, username, userId, onClose, onW
             <Text style={styles.close}>X</Text>
           </Pressable>
         </View>
-        {result ? resultView : session ? sessionView : hub}
+
+        {memorizeMode === null ? modeSelection : result ? resultView : session ? sessionView : hub}
       </View>
     </Modal>
   );
@@ -464,5 +558,7 @@ const styles = StyleSheet.create({
   primaryText: { fontFamily: 'Silkscreen_700Bold', fontSize: 17, color: INK, letterSpacing: 1 },
   secondary: { marginTop: 10, height: 48, backgroundColor: CARD, borderWidth: 2, borderColor: INK, borderBottomWidth: 4, borderBottomColor: '#5A3E2B', alignItems: 'center', justifyContent: 'center' },
   secondaryText: { fontFamily: 'Silkscreen_700Bold', fontSize: 14, color: PARCHMENT },
+  optionButton: { backgroundColor: CARD, borderWidth: 2, borderColor: INK, padding: 10, marginBottom: 8 },
+  optionButtonSelected: { backgroundColor: '#F2BE4A' },
   pressed: { transform: [{ translateY: 2 }], opacity: 0.85 },
 });

@@ -1,9 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Things saved on this phone under the username (pet, decorations, power-ups, verses, quiz history).
-const PREFIXES = ['pet', 'decor', 'powers', 'powersGift', 'memory', 'seenQuestions'];
+// Things saved on this phone under the username (pet, decorations, power-ups, verses, verse battle moves, quiz history).
+const PREFIXES = ['pet', 'decor', 'powers', 'powersGift', 'memory', 'seenQuestions', 'verseMoves'];
 
-// After a username change: move this phone's saved data to the new name, so nothing looks lost.
 export async function moveUserData(oldName: string, newName: string) {
   for (const prefix of PREFIXES) {
     try {
