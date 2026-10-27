@@ -7,6 +7,7 @@ import { sendFriendRequest } from '../api/friends';
 import { useRequestCount } from '../session';
 import { POWERS, isRarePower, loadPowers, type PowerBag, type PowerKey } from '../battle/powerups';
 import { PET_BY_ANIMAL } from '../pets/forms';
+import ModeBooks, { type BattleMode } from '../components/ranked/ModeBooks';
 
 const INK = '#1B1612';
 const BG = '#2B211B';
@@ -22,7 +23,7 @@ const VS_PLAYER: Record<PowerKey, string> = {
   fifty: 'Removes one wrong answer',
 };
 
-// Ranked lobby: your points, the monthly leaderboard, FRIENDS and the FIND OPPONENT button.
+// Ranked lobby: choose QUIZ or VERSE battle, your points, the monthly leaderboard, FRIENDS and the start button.
 export default function Ranked() {
   const params = useLocalSearchParams<{ username?: string; userId?: string; animalId?: string; petName?: string; level?: string }>();
   const userId = Number(params.userId) || 0;
@@ -37,6 +38,13 @@ export default function Ranked() {
   const [bag, setBag] = useState<PowerBag | null>(null); // power-ups saved on this phone
   const [showPowers, setShowPowers] = useState(false);
   const petKey = PET_BY_ANIMAL[Number(params.animalId) || 1] ?? 'donkey';
+  // Which battle the bottom button starts: QUIZ (live players) or VERSE
+  const [mode, setMode] = useState<BattleMode>('quiz');
+  const [flipped, setFlipped] = useState<BattleMode | null>(null);
+  const tapBook = (m: BattleMode) => {
+    setMode(m);
+    setFlipped((f) => (f === m ? null : m)); // tap again to flip back
+  };
 
   useEffect(() => {
     loadPowers(params.username).then(setBag);
@@ -74,6 +82,22 @@ export default function Ranked() {
         level: params.level ?? '',
       },
     });
+
+  // Verse Battle (Kirk's screen). push, so its back button returns here.
+  const startVerseBattle = () => {
+    const level = Number(params.level) || 1;
+    router.push({
+      pathname: '/verse-battle',
+      params: {
+        username: params.username ?? '',
+        userId: params.userId ?? '',
+        animalId: params.animalId ?? '',
+        level: String(level),
+        milestone: String(Math.max(5, Math.floor(level / 5) * 5)),
+        petName: params.petName || 'Your pet',
+      },
+    });
+  };
 
   const goFriends = () =>
     router.replace({
@@ -139,6 +163,14 @@ export default function Ranked() {
           {season ? `${seasonName(season)} season · resets every month` : 'Live Bible battles against other players'}
         </Text>
 
+        {/* Choose the battle: two books */}
+        <ModeBooks
+          mode={mode}
+          flipped={flipped}
+          onTap={tapBook}
+          points={{ quiz: me ? `${me.points} PTS` : '— PTS', verse: 'NEW' }}
+        />
+
         {/* Your card */}
         <View style={styles.meCard}>
           <Image source={require('../../assets/images/icon_coin.png')} style={styles.meIcon} />
@@ -175,12 +207,21 @@ export default function Ranked() {
           </View>
         </Pressable>
 
-        <View style={styles.howBox}>
-          <Text style={styles.how}>• Same question for both of you, at the same time.</Text>
-          <Text style={styles.how}>• Faster right answer attacks. Wrong answers hurt. 3 hearts each.</Text>
-          <Text style={styles.how}>• Win to take points from your opponent. Beat stronger players for more.</Text>
-          <Text style={styles.how}>• Freeze Time freezes your opponent for 3 seconds!</Text>
-        </View>
+        {mode === 'quiz' ? (
+          <View style={styles.howBox}>
+            <Text style={styles.how}>• Same question for both of you, at the same time.</Text>
+            <Text style={styles.how}>• Faster right answer attacks. Wrong answers hurt. 3 hearts each.</Text>
+            <Text style={styles.how}>• Win to take points from your opponent. Beat stronger players for more.</Text>
+            <Text style={styles.how}>• Freeze Time freezes your opponent for 3 seconds!</Text>
+          </View>
+        ) : (
+          <View style={[styles.howBox, styles.howVerse]}>
+            <Text style={styles.how}>• Pick 4 verse moves for your pet.</Text>
+            <Text style={styles.how}>• To attack, tap the verse's word tiles in the right order before time runs out.</Text>
+            <Text style={styles.how}>• Some animals are strong against others. Choose your moves wisely!</Text>
+            <Text style={styles.how}>• For now you battle a wild animal. Battles against players are coming.</Text>
+          </View>
+        )}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !board ? <ActivityIndicator color={GOLD} style={{ marginTop: 20 }} /> : null}
@@ -241,12 +282,12 @@ export default function Ranked() {
       {/* Find opponent */}
       <View style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
         <Pressable
-          onPress={findOpponent}
+          onPress={mode === 'quiz' ? findOpponent : startVerseBattle}
           disabled={!userId}
           accessibilityRole="button"
-          style={({ pressed }) => [styles.findBtn, pressed && styles.findPressed, !userId && { opacity: 0.5 }]}
+          style={({ pressed }) => [styles.findBtn, mode === 'verse' && styles.findVerse, pressed && styles.findPressed, !userId && { opacity: 0.5 }]}
         >
-          <Text style={styles.findText}>FIND OPPONENT</Text>
+          <Text style={[styles.findText, mode === 'verse' && { color: '#F2E6C8' }]}>{mode === 'quiz' ? 'FIND OPPONENT' : 'START VERSE BATTLE'}</Text>
         </Pressable>
       </View>
 
@@ -409,6 +450,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  findVerse: { backgroundColor: '#2E4A8C', borderBottomColor: '#141E3D' },
+  howVerse: { borderLeftColor: '#6E8BD6' },
   findPressed: { borderBottomWidth: 3, transform: [{ translateY: 5 }] },
   findText: { fontFamily: 'Silkscreen_700Bold', fontSize: 20, color: INK, letterSpacing: 1 },
 });
