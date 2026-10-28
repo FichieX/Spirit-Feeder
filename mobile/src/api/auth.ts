@@ -1,4 +1,22 @@
-export const API_URL = 'http://172.20.10.2:8000';
+import Constants from 'expo-constants';
+
+// Where the backend server is. You don't need to edit this anymore:
+// the phone already knows the computer it loaded the app from (the Expo QR code),
+// and the server runs on that same computer, port 8000.
+// To use a different server (e.g. a tunnel link), put this in mobile/.env.local:
+//   EXPO_PUBLIC_API_URL=https://your-link.trycloudflare.com
+function findServer(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+  if (fromEnv) return fromEnv.replace(/\/+$/, '');
+  const hostUri =
+    Constants.expoConfig?.hostUri ?? // e.g. "192.168.1.105:8081"
+    (Constants as any).expoGoConfig?.debuggerHost ??
+    (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
+  const host = hostUri?.split(':')[0];
+  return host ? `http://${host}:8000` : 'http://localhost:8000';
+}
+
+export const API_URL = findServer();
 export type User = { 
   id: number; 
   username: string; 
