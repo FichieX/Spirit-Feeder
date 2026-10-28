@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { PET_BY_ANIMAL } from '../pets/forms';
 import {
   ANIMAL_TYPES,
@@ -11,6 +12,14 @@ import {
   type AnimalKey,
   type AnimalMove,
 } from '../battle/animals';
+import MovePicker from '../components/verse/MovePicker';
+import { isTester } from '../components/study/TestPanel';
+import SinaiArena, { SINAI_SKY } from '../components/verse/SinaiArena';
+import MoveTablets, { moveColor } from '../components/verse/MoveTablets';
+
+// Bright word tiles: each tile gets one of these (by position, so colors say nothing about the answer)
+const TILE_COLORS = ['#FF4F79', '#3DA5FF', '#4FE08A', '#FFD23D', '#FF8A3D', '#B26BFF'];
+import { loadDecor, outfitOn, type DecorState } from '../decor/items';
 
 type BattleMove = AnimalMove & {
   pp: number;
@@ -43,6 +52,9 @@ export default function VerseBattle() {
   }>();
 
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  // Players must know the verse by heart. Test accounts can see it, to make testing easier.
+  const showVerse = isTester(params.username);
 
   const animalId = Number(params.animalId) || 1;
   const petKey = (PET_BY_ANIMAL[animalId] ?? 'donkey') as AnimalKey;
@@ -51,10 +63,17 @@ export default function VerseBattle() {
   const petName = (params.petName || 'Your pet').toString();
 
   const enemyKey: AnimalKey = useMemo(() => {
-    const order: AnimalKey[] = ['lion', 'donkey', 'camel', 'raven', 'dove', 'fish'];
+    // Only animals that have pixel art yet (dove and fish don't, so they can't show up in the arena)
+    const order: AnimalKey[] = ['lion', 'donkey', 'camel', 'raven'];
     const idx = order.indexOf(petKey);
     return order[(idx + 1 + (milestone % order.length)) % order.length];
   }, [milestone, petKey]);
+
+  // Your pet wears its outfit / necklace in the arena too
+  const [decor, setDecor] = useState<DecorState>({ owned: [], used: [] });
+  useEffect(() => {
+    loadDecor(params.username).then(setDecor);
+  }, [params.username]);
 
   const [playerHp, setPlayerHp] = useState(PLAYER_MAX_HP);
   const [enemyHp, setEnemyHp] = useState(PLAYER_MAX_HP);
@@ -62,6 +81,7 @@ export default function VerseBattle() {
   const [selectedMove, setSelectedMove] = useState<BattleMove | null>(null);
   const [currentWords, setCurrentWords] = useState<string[]>([]);
   const [orderedWords, setOrderedWords] = useState<string[]>([]);
+  const [usedTiles, setUsedTiles] = useState<number[]>([]); // which word tiles are placed, in order
   const [timer, setTimer] = useState(30);
   const [round, setRound] = useState(1);
   const [availableMoves, setAvailableMoves] = useState<BattleMove[]>([]);
@@ -127,6 +147,7 @@ export default function VerseBattle() {
     setSelectedMove(null);
     setCurrentWords([]);
     setOrderedWords([]);
+    setUsedTiles([]);
     setTimer(30);
   };
 
@@ -142,6 +163,17 @@ export default function VerseBattle() {
     setTimeout(() => {
       setLog(`${cpuMove.name} hit for ${cpuDamage.damage} damage. Pick your next move.`);
     }, 200);
+
+    // Back to your moves for the next round (before, the battle got stuck here)
+    setTimeout(() => {
+      resetTurn();
+      setRound((r) => r + 1);
+      if (playerHp - cpuDamage.damage <= 0) {
+        setBattleEnded(true);
+        Alert.alert('Defeat', `${petName} was overwhelmed. Try another round.`);
+        router.back();
+      }
+    }, 900);
   };
 
   const tryMove = (move: BattleMove) => {
@@ -154,15 +186,31 @@ export default function VerseBattle() {
 
     setSelectedMove(move);
     setCurrentWords(scrambleWords(verseText));
+    setOrderedWords([]);
+    setUsedTiles([]);
     setTimer(30);
     setLog(`Reorder the verse for: ${move.name}`);
   };
 
-  const handleWordTap = (word: string) => {
-    if (!selectedMove) return;
-    if (orderedWords.includes(word)) return;
+  // Take a placed word back off the answer (and the words after it), so you can pick again
+  const takeBackFrom = (pos: number) => {
+    const keep = usedTiles.slice(0, pos);
+    setUsedTiles(keep);
+    setOrderedWords(keep.map((i) => currentWords[i]));
+  };
 
-    const next = [...orderedWords, word];
+  // Tiles are tracked by position, so verses with the same word twice ("the ... the") still work
+  const handleWordTap = (word: string, tile: number) => {
+    if (!selectedMove) return;
+    const placedAt = usedTiles.indexOf(tile);
+    if (placedAt !== -1) {
+      takeBackFrom(placedAt); // tapped again: take it back
+      return;
+    }
+
+    const nextTiles = [...usedTiles, tile];
+    setUsedTiles(nextTiles);
+    const next = nextTiles.map((i) => currentWords[i]);
     setOrderedWords(next);
 
     const verseText = selectedMove.verseText ?? selectedMove.name;
@@ -238,173 +286,151 @@ export default function VerseBattle() {
 
   const canStartBattle = selectedMoves.length === 4;
 
+  // Once the battle has started you can't just leave: leaving counts as a loss
+  // (in ranked battles that will cost leaderboard points).
+  const inBattle = !selectionOpen && !battleEnded;
+  const confirmForfeit = () =>
+    Alert.alert('Forfeit the battle?', 'Leaving now counts as a loss. In ranked battles you will lose points.', [
+      { text: 'Keep fighting', style: 'cancel' },
+      {
+        text: 'Forfeit',
+        style: 'destructive',
+        onPress: () => {
+          setBattleEnded(true);
+          router.back();
+        },
+      },
+    ]);
+  useEffect(() => {
+    if (!inBattle) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      confirmForfeit(); // Android back button asks first
+      return true;
+    });
+    return () => sub.remove();
+  }, [inBattle]);
+
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>VERSE BATTLE</Text>
-      <Text style={styles.subTitle}>
-        {petName} vs {ANIMAL_TYPES[enemyKey].name}
-      </Text>
-
+      {/* No swipe-back during the battle */}
+      <Stack.Screen options={{ gestureEnabled: !inBattle }} />
       {selectionOpen ? (
-        <View style={styles.selectionBox}>
-          <Text style={styles.selectionTitle}>Choose 4 moves</Text>
-          <Text style={styles.selectionSub}>Pick 4 memorised verse moves from your unlocked pool.</Text>
-
-          <View style={styles.grid}>
-            {availableMoves.map((move) => (
-              <Pressable
-                key={move.key}
-                onPress={() => toggleSelectedMove(move)}
-                style={[
-                  styles.moveCard,
-                  selectedMoves.some((m) => m.key === move.key) && styles.selectedMoveCard,
-                ]}
-              >
-                <Text style={styles.moveTitle}>{move.name}</Text>
-                <Text style={styles.moveRef}>{move.verse_ref}</Text>
-                <Text style={styles.moveDesc}>{move.description}</Text>
-                <Text style={styles.movePP}>
-                  {move.pp}/{move.maxPp} PP
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <Pressable
-            disabled={!canStartBattle}
-            onPress={() => {
-              if (!canStartBattle) {
-                Alert.alert('Verse battle', 'Select exactly 4 moves before starting.');
-                return;
-              }
-
+        <View style={[styles.pad, { flex: 1, paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
+          <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" style={{ alignSelf: 'flex-start' }}>
+            <Text style={styles.pickerBack}>‹ BACK</Text>
+          </Pressable>
+          <Text style={styles.title}>VERSE BATTLE</Text>
+          <Text style={styles.subTitle}>
+            {petName} vs {ANIMAL_TYPES[enemyKey].name}
+          </Text>
+          <MovePicker
+            moves={availableMoves}
+            selected={selectedMoves}
+            onToggle={toggleSelectedMove}
+            onStart={() => {
               setSelectionOpen(false);
               setLog('Battle started. Reorder the verse to attack.');
             }}
-            style={[
-              styles.confirmButton,
-              !canStartBattle && styles.confirmButtonDisabled,
-            ]}
-          >
-            <Text style={styles.confirmButtonText}>Start battle</Text>
-          </Pressable>
+          />
         </View>
       ) : null}
 
       {!selectionOpen ? (
         <>
-          <View style={styles.statusBar}>
-            <View style={styles.hpBlock}>
-              <Text style={styles.hpLabel}>{petName}</Text>
-              <Text style={styles.hpValue}>
-                {Math.max(0, Math.round(playerHp))}/{getAnimalMaxHealth(playerLevel, petKey)}
-              </Text>
-              <View style={styles.healthBarTrack}>
-                <View
-                  style={[
-                    styles.healthBarFill,
-                    {
-                      width: `${Math.max(0, Math.min(100, (playerHp / getAnimalMaxHealth(playerLevel, petKey)) * 100))}%`,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
+          {/* Mount Sinai arena, like the serpent battle */}
+          <View style={{ height: insets.top, backgroundColor: SINAI_SKY }} />
+          <SinaiArena
+            pet={{
+              key: petKey,
+              name: petName,
+              level: playerLevel,
+              hp: playerHp,
+              maxHp: getAnimalMaxHealth(playerLevel, petKey),
+              outfit: outfitOn(decor, petKey),
+              necklace: decor.used.includes('necklace'),
+            }}
+            enemy={{
+              key: enemyKey,
+              name: ANIMAL_TYPES[enemyKey].name,
+              level: milestone,
+              hp: enemyHp,
+              maxHp: getAnimalMaxHealth(milestone, enemyKey),
+            }}
+          />
 
-            <View style={styles.hpBlock}>
-              <Text style={styles.hpLabel}>{ANIMAL_TYPES[enemyKey].name}</Text>
-              <Text style={styles.hpValue}>
-                {Math.max(0, Math.round(enemyHp))}/{getAnimalMaxHealth(milestone, enemyKey)}
-              </Text>
-              <View style={styles.healthBarTrack}>
-                <View
-                  style={[
-                    styles.healthBarFillEnemy,
-                    {
-                      width: `${Math.max(0, Math.min(100, (enemyHp / getAnimalMaxHealth(milestone, enemyKey)) * 100))}%`,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pad, { paddingTop: 12, paddingBottom: insets.bottom + 18 }]}>
+          <View style={styles.logBox}>
+            <Text style={styles.log}>{log}</Text>
+            {selectedMove ? <Text style={[styles.timer, timer <= 5 && { color: '#E06A4F' }]}>{`⌛ ${timer}s`}</Text> : null}
           </View>
-
-          <Text style={styles.log}>{log}</Text>
-          <Text style={styles.timer}>Time: {timer}s</Text>
 
           {selectedMove ? (
             <View style={styles.challengeBox}>
-              <Text style={styles.moveName}>{selectedMove.name}</Text>
+              <View style={styles.challengeHead}>
+                <Text style={styles.moveName} numberOfLines={1}>
+                  {selectedMove.name.toUpperCase()}
+                </Text>
+                <Text style={[styles.kindTag, { backgroundColor: moveColor(selectedMove).main }]}>{selectedMove.verse_ref}</Text>
+              </View>
 
+              {showVerse ? (
               <View style={styles.versePaper}>
+                <Text style={styles.testTag}>TEST: answer shown for testers only</Text>
                 <Text style={styles.versePreview}>
                   {selectedMove.verseText ?? selectedMove.name}
                 </Text>
               </View>
+              ) : null}
 
-              <Text style={styles.help}>Reorder the verse itself, not the move name.</Text>
+              <Text style={styles.help}>Tap the words in order, from memory. Tap a word again to take it back.</Text>
 
               <View style={styles.wordRow}>
                 {currentWords.map((word, index) => (
                   <Pressable
                     key={`${word}-${index}`}
-                    style={styles.wordButton}
-                    onPress={() => handleWordTap(word)}
+                    style={({ pressed }) => [
+                      styles.wordButton,
+                      { backgroundColor: TILE_COLORS[index % TILE_COLORS.length] },
+                      usedTiles.includes(index) && styles.wordButtonUsed,
+                      pressed && { transform: [{ translateY: 2 }] },
+                    ]}
+                    onPress={() => handleWordTap(word, index)}
+                    accessibilityLabel={usedTiles.includes(index) ? `${word}, placed. Tap to take it back` : word}
                   >
                     <Text style={styles.wordText}>{word}</Text>
                   </Pressable>
                 ))}
               </View>
 
-              <Text style={styles.progressLabel}>Answer:</Text>
+              <Text style={styles.progressLabel}>YOUR VERSE</Text>
               <View style={styles.answerRow}>
                 {(selectedMove.verseText ?? selectedMove.name)
                   .split(/\s+/)
                   .filter(Boolean)
                   .map((word, index) => (
-                    <View
+                    <Pressable
                       key={`${word}-${index}`}
+                      disabled={orderedWords[index] === undefined}
+                      onPress={() => takeBackFrom(index)}
+                      accessibilityLabel={orderedWords[index] ? `${orderedWords[index]}. Tap to take it back` : 'Empty'}
                       style={[
                         styles.answerSlot,
-                        orderedWords[index] === word && styles.answerSlotFilled,
+                        orderedWords[index] !== undefined && styles.answerSlotFilled, // same color right or wrong: no hints
                       ]}
                     >
                       <Text style={styles.answerText}>{orderedWords[index] ?? '_'}</Text>
-                    </View>
+                    </Pressable>
                   ))}
               </View>
             </View>
           ) : (
-            <View style={styles.moveGrid}>
-              {selectedMoves.length > 0 ? (
-                selectedMoves.map((move) => (
-                  <Pressable key={move.key} style={styles.moveCard} onPress={() => tryMove(move)}>
-                    <Text style={styles.moveTitle}>{move.name}</Text>
-                    <Text style={styles.moveRef}>{move.verse_ref}</Text>
-                    <Text style={styles.moveDesc}>{move.description}</Text>
-                    <Text style={styles.movePP}>
-                      {move.pp}/{move.maxPp} PP
-                    </Text>
-                  </Pressable>
-                ))
-              ) : (
-                availableMoves.map((move) => (
-                  <Pressable key={move.key} style={styles.moveCard} onPress={() => tryMove(move)}>
-                    <Text style={styles.moveTitle}>{move.name}</Text>
-                    <Text style={styles.moveRef}>{move.verse_ref}</Text>
-                    <Text style={styles.moveDesc}>{move.description}</Text>
-                    <Text style={styles.movePP}>
-                      {move.pp}/{move.maxPp} PP
-                    </Text>
-                  </Pressable>
-                ))
-              )}
-            </View>
+            <MoveTablets moves={selectedMoves.length > 0 ? selectedMoves : availableMoves} onPick={tryMove} />
           )}
 
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backText}>Back</Text>
+          <Pressable onPress={confirmForfeit} style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]} accessibilityRole="button">
+            <Text style={styles.backText}>FORFEIT</Text>
           </Pressable>
+          </ScrollView>
         </>
       ) : null}
     </View>
@@ -415,14 +441,16 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#2d1e1b',
-    padding: 18,
+  },
+  pad: {
+    paddingHorizontal: 18,
   },
   title: {
     fontSize: 28,
     fontWeight: '900',
     color: '#f5d98b',
     textAlign: 'center',
-    marginTop: 24,
+    marginTop: 4,
   },
   subTitle: {
     fontSize: 18,
@@ -451,16 +479,39 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginTop: 6,
   },
+  logBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#433E4A',
+    borderWidth: 3,
+    borderColor: '#1B1612',
+    borderBottomWidth: 6,
+    borderBottomColor: '#2A2630',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
   log: {
-    color: '#f2ebd5',
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Montserrat_500Medium',
+  },
+  pickerBack: {
+    fontFamily: 'Silkscreen_700Bold',
     fontSize: 15,
-    marginBottom: 8,
+    color: '#E8D9B5',
   },
   timer: {
-    color: '#ffb454',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 10,
+    fontFamily: 'Silkscreen_700Bold',
+    color: '#1B1612',
+    backgroundColor: '#FFD23D',
+    fontSize: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    overflow: 'hidden',
   },
   selectionBox: {
     backgroundColor: '#3b2c29',
@@ -532,16 +583,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   backButton: {
-    marginTop: 'auto',
-    backgroundColor: '#d9c79d',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
+    marginTop: 18,
+    alignSelf: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: '#5A3E2B',
   },
   backText: {
-    color: '#1a120d',
-    fontWeight: '800',
-    fontSize: 16,
+    fontFamily: 'Silkscreen_700Bold',
+    color: '#8C7765',
+    fontSize: 12,
   },
   healthBarTrack: {
     height: 12,
@@ -559,26 +611,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#ff8d6e',
   },
   challengeBox: {
-    backgroundColor: '#F0E1B2',
+    backgroundColor: '#58525F',
     borderWidth: 3,
     borderColor: '#1B1612',
-    borderRadius: 14,
+    borderBottomWidth: 7,
+    borderBottomColor: '#2A2630',
     padding: 12,
     marginBottom: 12,
   },
   moveName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#7A2626',
-    marginBottom: 8,
+    flex: 1,
+    fontFamily: 'Silkscreen_700Bold',
+    fontSize: 16,
+    color: '#FFFFFF',
   },
   versePaper: {
-    backgroundColor: '#F9F2DB',
+    backgroundColor: '#F2E6C8',
     borderWidth: 2,
-    borderColor: '#1B1612',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    borderStyle: 'dashed',
+    borderColor: '#FF4F79',
+    padding: 10,
+    marginBottom: 10,
   },
   versePreview: {
     color: '#3A281C',
@@ -587,56 +640,86 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   help: {
-    color: '#5A3E2B',
+    color: '#CFC8D6',
+    fontSize: 12,
     marginBottom: 10,
-    fontWeight: '600',
+    fontFamily: 'Montserrat_500Medium',
   },
   wordRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 8,
+    paddingVertical: 4,
   },
   wordButton: {
-    backgroundColor: '#F2BE4A',
     borderWidth: 2,
-    borderColor: '#8A6420',
-    borderBottomWidth: 4,
-    borderBottomColor: '#B07E1E',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    margin: 4,
+    borderColor: '#1B1612',
+    borderBottomWidth: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
   },
   wordText: {
     color: '#1B1612',
-    fontWeight: '700',
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 14,
   },
   progressLabel: {
-    marginTop: 10,
-    color: '#7A2626',
-    fontWeight: '700',
+    marginTop: 14,
+    fontFamily: 'Silkscreen_700Bold',
+    fontSize: 11,
+    color: '#F5C542',
+    letterSpacing: 1,
   },
   answerRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 6,
     marginTop: 8,
+    padding: 8,
+    backgroundColor: '#2E2A34',
+    borderWidth: 2,
+    borderColor: '#F5C542',
   },
   answerSlot: {
-    minWidth: 44,
-    minHeight: 36,
-    borderRadius: 8,
-    backgroundColor: '#E8D9B5',
-    borderWidth: 1,
+    minWidth: 40,
+    minHeight: 32,
+    paddingHorizontal: 6,
+    backgroundColor: '#433E4A',
+    borderWidth: 2,
     borderColor: '#1B1612',
-    margin: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   answerSlotFilled: {
-    backgroundColor: '#9BCB4C',
+    backgroundColor: '#F2E6C8',
+  },
+  testTag: {
+    fontFamily: 'Silkscreen_700Bold',
+    fontSize: 9,
+    color: '#FF4F79',
+    marginBottom: 4,
+  },
+  wordButtonUsed: {
+    opacity: 0.25,
+  },
+  challengeHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  kindTag: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 11,
+    color: '#FFFFFF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    overflow: 'hidden',
   },
   answerText: {
     color: '#1B1612',
-    fontWeight: '700',
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 13,
   },
 });
