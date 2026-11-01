@@ -1,22 +1,56 @@
 import Constants from 'expo-constants';
+import { TurboModuleRegistry } from 'react-native';
 
-// Where the backend server is. You don't need to edit this anymore:
-// the phone already knows the computer it loaded the app from (the Expo QR code),
-// and the server runs on that same computer, port 8000.
-// To use a different server (e.g. a tunnel link), put this in mobile/.env.local:
-//   EXPO_PUBLIC_API_URL=https://your-link.trycloudflare.com
+// Where the backend server is. You never need to edit this.
+// The server runs on the same computer the app was loaded from (the Expo QR code), port 8000.
+// Order of checks:
+//   1. A tunnel link (https://...) in mobile/.env.local as EXPO_PUBLIC_API_URL, for friends testing far away.
+//      Plain http:// addresses there are IGNORED on purpose: an old Wi-Fi/hotspot IP left behind
+//      in a settings file was breaking the connection.
+//   2. The address the app's code was actually downloaded from (always your computer).
+//   3. Expo's host address.
+
+function hostOf(url?: string | null) {
+  const m = url?.match(/^[a-z]+:\/\/([^/:?#]+)/i);
+  return m ? m[1] : undefined;
+}
+
+// Where this JavaScript was downloaded from, e.g. "http://192.168.50.201:8081/...bundle"
+function bundleHost(): string | undefined {
+  try {
+    const sourceCode: any = TurboModuleRegistry.get('SourceCode');
+    const consts = sourceCode?.getConstants ? sourceCode.getConstants() : sourceCode;
+    const host = hostOf(consts?.scriptURL);
+    return host && host !== 'localhost' && host !== '127.0.0.1' ? host : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+let serverSource = '';
 function findServer(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-  if (fromEnv) return fromEnv.replace(/\/+$/, '');
+  if (fromEnv && /^https:\/\//i.test(fromEnv)) {
+    serverSource = 'tunnel link (EXPO_PUBLIC_API_URL)';
+    return fromEnv.replace(/\/+$/, '');
+  }
+  const fromBundle = bundleHost();
+  if (fromBundle) {
+    serverSource = 'where the app was downloaded from';
+    return `http://${fromBundle}:8000`;
+  }
   const hostUri =
     Constants.expoConfig?.hostUri ?? // e.g. "192.168.1.105:8081"
     (Constants as any).expoGoConfig?.debuggerHost ??
     (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
   const host = hostUri?.split(':')[0];
+  serverSource = host ? 'Expo host' : 'fallback';
   return host ? `http://${host}:8000` : 'http://localhost:8000';
 }
 
 export const API_URL = findServer();
+// Shows up in the Expo terminal on your Mac, so you can see which address the app uses
+console.log(`[Spirit Feeder] server address: ${API_URL} (from ${serverSource})`);
 export type User = { 
   id: number; 
   username: string; 
@@ -42,7 +76,7 @@ async function post(path: string, body: object) {
       signal: controller.signal,
     });
   } catch {
-    throw new Error("Can't reach the server. Check your connection and try again.");
+    throw new Error(`Can't reach the server at ${API_URL} (v2: ${serverSource}). Check your connection and try again.`);
   } finally {
     clearTimeout(timer);
   }
@@ -87,7 +121,7 @@ export async function selectPet(userId: number, animalId: number) {
 
 export async function fetchPetStatus(userId: number) {
   const res = await fetch(`${API_URL}/api/pet/status/${userId}`).catch(() => null);
-  if (!res) throw new Error("Can't reach the server.");
+  if (!res) throw new Error(`Can't reach the server at ${API_URL} (v2: ${serverSource}).`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || 'Failed to fetch pet status.');
   return data;
@@ -95,7 +129,7 @@ export async function fetchPetStatus(userId: number) {
 
 export async function fetchNextReading(userId: number) {
   const res = await fetch(`${API_URL}/api/reading/next/${userId}`).catch(() => null);
-  if (!res) throw new Error("Can't reach the server.");
+  if (!res) throw new Error(`Can't reach the server at ${API_URL} (v2: ${serverSource}).`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || 'Failed to load scripture passage.');
   return data;
