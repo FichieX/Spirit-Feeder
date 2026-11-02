@@ -18,11 +18,12 @@ const DIM = '#8C7765';
 const SLOTS = 4;
 
 // Ribbon color by what the move does
+// (same bright colors as the stone tablets in battle)
 const ribbonColor = (m: Move) =>
-  m.power <= 0 ? { body: '#5B3F8C', dark: '#3D2A61' } // support (shield, rest...)
-  : m.power >= 95 ? { body: '#9C2B26', dark: '#6B1C18' } // finisher
-  : m.power >= 85 ? { body: '#2E4A8C', dark: '#1E3263' } // strong
-  : { body: '#3F7A4A', dark: '#2A5532' }; // steady
+  m.power <= 0 ? { body: '#8E4FE8', dark: '#5A26A8' } // support (shield, rest...): violet
+  : m.power >= 95 ? { body: '#F23D6E', dark: '#A81E46' } // finisher: hot pink
+  : m.power >= 85 ? { body: '#2F8CF0', dark: '#1A5AA8' } // strong: electric blue
+  : { body: '#22B866', dark: '#137A42' }; // steady: mint green
 
 // Step 1 of a verse battle: the moves hang out of a Bible as bookmark ribbons.
 // Drag a ribbon down onto the lectern (or just tap it). Tap a ribbon on the lectern to take it off.
@@ -115,7 +116,7 @@ export default function MovePicker({ moves, selected, onToggle, onStart }: Props
         <View style={styles.lecternStand} />
       </View>
 
-      <Text style={[styles.hint, hint && { color: '#E06A4F' }]}>{hint || `${selected.length} / ${Math.min(SLOTS, moves.length)} on the lectern`}</Text>
+      <Text style={[styles.hint, hint && { color: '#FFD23D' }]}>{hint || `${selected.length} / ${Math.min(SLOTS, moves.length)} on the lectern`}</Text>
 
       <Pressable
         disabled={!ready}
@@ -202,10 +203,18 @@ function Ribbon({
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, gap: 8 },
-  bibleHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bibleHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(27,22,18,0.82)',
+    borderWidth: 3,
+    borderColor: '#1B1612',
+    padding: 8,
+  },
   bible: { width: 36, height: 52 },
-  head: { fontFamily: 'Silkscreen_700Bold', fontSize: 15, color: GOLD },
-  sub: { fontFamily: 'Montserrat_400Regular', fontSize: 12, color: DIM, marginTop: 2 },
+  head: { fontFamily: 'Silkscreen_700Bold', fontSize: 15, color: '#FFD23D' },
+  sub: { fontFamily: 'Montserrat_500Medium', fontSize: 12, color: '#FFFFFF', marginTop: 2 },
   ribbons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingLeft: 2 },
   ribbonWrap: { width: '48.5%' },
   lifted: { zIndex: 50, elevation: 50, opacity: 0.92 },
@@ -270,7 +279,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   slotEmptyText: { fontFamily: 'Silkscreen_700Bold', fontSize: 12, color: '#C9A77A' },
-  hint: { fontFamily: 'Montserrat_500Medium', fontSize: 12, color: DIM, textAlign: 'center' },
+  hint: {
+    alignSelf: 'center',
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 12,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    backgroundColor: 'rgba(43,16,90,0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    overflow: 'hidden',
+  },
   start: {
     height: 54,
     backgroundColor: '#2E4A8C',

@@ -22,7 +22,7 @@ export default function ExitModal({ visible, petName, onStay, onLeave }: Props) 
               ? `${petName} will be waiting for you in the study.`
               : 'Your pet will be waiting for you in the study.'}
           </Text>
-          <Text style={styles.verse}>“The Lord bless thee, and keep thee.”{'\n'}Numbers 6:24</Text>
+          <Text style={styles.verse}>“May the LORD bless you and keep you.”{'\n'}Numbers 6:24</Text>
 
           <Pressable
             onPress={onStay}

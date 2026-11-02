@@ -3,15 +3,17 @@ import { Animated, Easing, Image, Modal, Pressable, StyleSheet, Text, View, useW
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ---------- Art (pixel art, 8 screen-pixels per art pixel in the files) ----------
-const SPREAD = require('../../../assets/images/bible_spread.png'); // open book, 170 x 250 art px
-const PAGE = require('../../../assets/images/bible_page.png'); // one right-hand page, 83 x 244 art px
+const SPREAD = require('../../../assets/images/bible_spread.png'); // open book, 176 x 190 art px (leather cover, gold corners, ribbon)
+const PAGE = require('../../../assets/images/bible_page.png'); // one right-hand page, 83 x 190 art px
 const COVER = require('../../../assets/images/bible_cover.png'); // closed Bible, 92 x 136 art px
-const ART_W = 170;
-const ART_H = 250;
+const ORNAMENT = require('../../../assets/images/bible_ornament.png'); // gold cross over a divider, 34 x 24 art px
+const ART_W = 176;
+const ART_H = 190;
 // Where the text goes on each page (art px)
-const LEFT_COL = { x: 9, y: 10, w: 69, h: 228 };
-const RIGHT_COL = { x: 92, y: 10, w: 69, h: 228 };
-const PAGE_BOX = { x: 84, y: 3, w: 83, h: 244 }; // the page that flips
+// (inside each page's thin gold border)
+const LEFT_COL = { x: 15, y: 17, w: 65, h: 150 };
+const RIGHT_COL = { x: 96, y: 17, w: 65, h: 150 };
+const PAGE_BOX = { x: 89, y: 0, w: 83, h: 190 }; // the page that flips
 
 // ---------- Colors ----------
 const BG = '#2B211B';
@@ -78,12 +80,13 @@ const FONT_SIZE = 15;
 const LINE_H = 23;
 const HEADER_H = 106; // space for book name + title + reference on the first page (grows if a long book name wraps)
 
-// Used when the server can't be reached (John 1:1-5, KJV)
+// Used when the server can't be reached (John 1:1-5, BSB)
 const FALLBACK = {
+  book: 'John',
   chapter: 1,
   title: 'The Word Became Flesh (John 1:1-5)',
   content:
-    'In the beginning was the Word, and the Word was with God, and the Word was God. The same was in the beginning with God. All things were made by him; and without him was not any thing made that was made. In him was life; and the life was the light of men. And the light shineth in darkness; and the darkness comprehended it not.',
+    'In the beginning was the Word, and the Word was with God, and the Word was God. He was with God in the beginning. Through Him all things were made, and without Him nothing was made that has been made. In Him was life, and that life was the light of men. The Light shines in the darkness, and the darkness has not overcome it.',
 };
 
 export type Reading = { book?: string; chapter?: number; title: string; content: string } | null;
@@ -159,11 +162,19 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
   // ---- Pages: measure the passage in a hidden Text, then cut its lines into pages ----
   const colW = LEFT_COL.w * k;
   const colH = LEFT_COL.h * k;
-  const headerBox = Math.max(HEADER_H, (headH ?? 0) + 6);
+  // Space for the heading: just what it measured, plus a little gap (no big empty band)
+  const headerBox = headH === null ? HEADER_H : headH + 12;
   const pages = useMemo(() => {
     if (!lines || headH === null) return [] as string[][];
     const perPage = Math.max(3, Math.floor(colH / LINE_H));
     const first = Math.max(2, Math.floor((colH - headerBox) / LINE_H));
+    // Short passage that fits on the first page: share it between the two pages so the
+    // open book looks balanced (the left page also holds the heading).
+    if (lines.length <= first && lines.length >= 6) {
+      const headLines = headerBox / LINE_H;
+      const left = Math.min(first, Math.max(2, Math.ceil((lines.length - headLines) / 2)));
+      return [lines.slice(0, left), lines.slice(left)];
+    }
     const out: string[][] = [lines.slice(0, first)];
     for (let i = first; i < lines.length; i += perPage) out.push(lines.slice(i, i + perPage));
     return out;
@@ -249,15 +260,25 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
     </>
   );
 
+  // Gold cross + AMEN at the end of the passage
+  const Ornament = ({ size }: { size: number }) => (
+    <View style={styles.ornament}>
+      <Image source={ORNAMENT} style={{ width: size, height: (size * 24) / 34 }} />
+      <Text style={styles.amen}>AMEN</Text>
+      <Text style={styles.ornamentText}>Tap DONE to earn your bread</Text>
+    </View>
+  );
+
   const PageText = ({ index }: { index: number }) => {
     const ls = pages[index];
     const pageNo = index + 1;
+    const perPage = Math.max(3, Math.floor(colH / LINE_H));
+    const lastPage = index === pages.length - 1;
     if (!ls) {
-      // Empty right-hand page at the end: a small ornament
+      // Empty right-hand page at the end
       return (
-        <View style={styles.ornament}>
-          <Text style={styles.ornamentCross}>✝</Text>
-          <Text style={styles.ornamentText}>Press DONE to earn your bread</Text>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <Ornament size={colW * 0.66} />
         </View>
       );
     }
@@ -273,6 +294,12 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
             {l.replace(/\s+$/, '')}
           </Text>
         ))}
+        {/* The passage ends on this page and there's room: close it with the ornament */}
+        {lastPage && perPage - ls.length - (index === 0 ? Math.ceil(headerBox / LINE_H) : 0) >= 6 ? (
+          <View style={{ marginTop: 14 }}>
+            <Ornament size={colW * 0.5} />
+          </View>
+        ) : null}
         <Text style={styles.pageNo}>{pageNo}</Text>
       </View>
     );
@@ -288,7 +315,12 @@ export default function BibleReader({ visible, reading, busy, onDone, onClose }:
       <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
         {/* Close */}
         <View style={styles.topBar}>
-          <Text style={styles.topHint}>{phase === 'cover' ? 'Tap the Bible to open it' : phase === 'reading' ? '' : 'Tap to skip'}</Text>
+          {reading ? (
+            <Text style={styles.topHint}>{phase === 'cover' ? 'Tap the Bible to open it' : phase === 'reading' ? '' : 'Tap to skip'}</Text>
+          ) : (
+            // No passage from the server (offline): this is the backup passage
+            <Text style={styles.offline}>OFFLINE · can't reach the server</Text>
+          )}
           <Pressable onPress={onClose} hitSlop={14} accessibilityRole="button" accessibilityLabel="Close the Bible">
             <Text style={styles.close}>X</Text>
           </Pressable>
@@ -414,9 +446,10 @@ const styles = StyleSheet.create({
   ref: { fontFamily: 'Montserrat_500Medium', fontSize: 12, color: REF, textAlign: 'center', marginTop: 6 },
   verse: { fontFamily: 'Montserrat_400Regular', fontSize: FONT_SIZE, lineHeight: LINE_H, color: TEXT },
   pageNo: { position: 'absolute', bottom: -2, alignSelf: 'center', fontFamily: 'Montserrat_500Medium', fontSize: 11, color: REF },
-  ornament: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  ornamentCross: { fontSize: 34, color: GOLD },
-  ornamentText: { fontFamily: 'Montserrat_500Medium', fontSize: 12, color: REF, textAlign: 'center' },
+  ornament: { alignItems: 'center', gap: 6 },
+  amen: { fontFamily: 'Silkscreen_700Bold', fontSize: 14, color: TITLE, letterSpacing: 3, marginTop: 2 },
+  ornamentText: { fontFamily: 'Montserrat_500Medium', fontSize: 11, color: REF, textAlign: 'center' },
+  offline: { fontFamily: 'Silkscreen_700Bold', fontSize: 11, color: '#E06A4F', backgroundColor: '#3A2219', paddingHorizontal: 8, paddingVertical: 3, overflow: 'hidden' },
   bottom: { height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22 },
   arrowBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   arrow: { fontSize: 24, color: GOLD },

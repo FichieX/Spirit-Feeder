@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { PET_BY_ANIMAL } from '../pets/forms';
@@ -13,6 +13,9 @@ import {
   type AnimalMove,
 } from '../battle/animals';
 import MovePicker from '../components/verse/MovePicker';
+import GalileeScene from '../components/verse/GalileeScene';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { isTester } from '../components/study/TestPanel';
 import SinaiArena, { SINAI_SKY } from '../components/verse/SinaiArena';
 import MoveTablets, { moveColor } from '../components/verse/MoveTablets';
@@ -80,13 +83,40 @@ export default function VerseBattle() {
   const [log, setLog] = useState('Choose 4 moves for the battle, or use all unlocked moves if you have fewer than 5.');
   const [selectedMove, setSelectedMove] = useState<BattleMove | null>(null);
   const [currentWords, setCurrentWords] = useState<string[]>([]);
-  const [orderedWords, setOrderedWords] = useState<string[]>([]);
-  const [usedTiles, setUsedTiles] = useState<number[]>([]); // which word tiles are placed, in order
+  const [orderedWords, setOrderedWords] = useState<(string | undefined)[]>([]);
+  // Which word tile sits in each blank of the verse (null = empty). Blanks can be filled in any order.
+  const [slotTiles, setSlotTiles] = useState<(number | null)[]>([]);
+  const [activeSlot, setActiveSlot] = useState(0); // the blank the next word goes into
   const [timer, setTimer] = useState(30);
   const [round, setRound] = useState(1);
   const [availableMoves, setAvailableMoves] = useState<BattleMove[]>([]);
   const [selectedMoves, setSelectedMoves] = useState<BattleMove[]>([]);
   const [selectionOpen, setSelectionOpen] = useState(false);
+
+  // Calm harp music while choosing ribbons (can be turned off; remembered on this phone)
+  const music = useAudioPlayer(require('../../assets/sounds/galilee_music.m4a'));
+  const [musicOn, setMusicOn] = useState(true);
+  useEffect(() => {
+    AsyncStorage.getItem('music:on')
+      .then((v) => v === '0' && setMusicOn(false))
+      .catch(() => {});
+    setAudioModeAsync({ playsInSilentMode: false, interruptionMode: 'mixWithOthers' }).catch(() => {});
+  }, []);
+  useEffect(() => {
+    try {
+      music.loop = true;
+      music.volume = 0.35;
+      if (selectionOpen && musicOn) music.play();
+      else music.pause();
+    } catch {}
+  }, [selectionOpen, musicOn, music]);
+  const toggleMusic = () => {
+    setMusicOn((on) => {
+      AsyncStorage.setItem('music:on', on ? '0' : '1').catch(() => {});
+      return !on;
+    });
+  };
+
   const [battleEnded, setBattleEnded] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -147,7 +177,8 @@ export default function VerseBattle() {
     setSelectedMove(null);
     setCurrentWords([]);
     setOrderedWords([]);
-    setUsedTiles([]);
+    setSlotTiles([]);
+    setActiveSlot(0);
     setTimer(30);
   };
 
@@ -187,36 +218,50 @@ export default function VerseBattle() {
     setSelectedMove(move);
     setCurrentWords(scrambleWords(verseText));
     setOrderedWords([]);
-    setUsedTiles([]);
+    setSlotTiles([]);
+    setActiveSlot(0);
     setTimer(30);
     setLog(`Reorder the verse for: ${move.name}`);
   };
 
   // Take a placed word back off the answer (and the words after it), so you can pick again
-  const takeBackFrom = (pos: number) => {
-    const keep = usedTiles.slice(0, pos);
-    setUsedTiles(keep);
-    setOrderedWords(keep.map((i) => currentWords[i]));
+  const applySlots = (slots: (number | null)[]) => {
+    setSlotTiles(slots);
+    setOrderedWords(slots.map((t) => (t == null ? undefined : currentWords[t])));
   };
 
-  // Tiles are tracked by position, so verses with the same word twice ("the ... the") still work
+  // Tap a filled blank (or its tile) to take that word back out
+  const clearSlot = (pos: number) => {
+    const slots = [...slotTiles];
+    slots[pos] = null;
+    applySlots(slots);
+    setActiveSlot(pos);
+  };
+
+  // Words can go into the blanks in any order. Tap a blank to choose where the next word goes
+  // (otherwise it fills the next empty blank). Same words ("the ... the") are interchangeable.
   const handleWordTap = (word: string, tile: number) => {
     if (!selectedMove) return;
-    const placedAt = usedTiles.indexOf(tile);
-    if (placedAt !== -1) {
-      takeBackFrom(placedAt); // tapped again: take it back
-      return;
-    }
-
-    const nextTiles = [...usedTiles, tile];
-    setUsedTiles(nextTiles);
-    const next = nextTiles.map((i) => currentWords[i]);
-    setOrderedWords(next);
-
     const verseText = selectedMove.verseText ?? selectedMove.name;
     const targetWords = verseText.split(/\s+/).filter(Boolean);
 
-    if (next.join(' ') === verseText) {
+    const placedAt = slotTiles.indexOf(tile);
+    if (placedAt !== -1) {
+      clearSlot(placedAt); // tapped again: take it back
+      return;
+    }
+
+    const slots = targetWords.map((_, i) => slotTiles[i] ?? null);
+    const pos = slots[activeSlot] == null ? activeSlot : slots.indexOf(null);
+    if (pos === -1) return; // every blank is full: take a word out first
+    slots[pos] = tile;
+    applySlots(slots);
+    const after = slots.findIndex((t, i) => t == null && i > pos);
+    setActiveSlot(after !== -1 ? after : Math.max(0, slots.indexOf(null)));
+
+    const next = slots.map((t) => (t == null ? '' : currentWords[t]));
+
+    if (slots.every((t) => t != null) && next.join(' ') === targetWords.join(' ')) {
       if (timerRef.current) clearInterval(timerRef.current);
 
       const playerDamage = computeAnimalDamage(
@@ -316,9 +361,22 @@ export default function VerseBattle() {
       <Stack.Screen options={{ gestureEnabled: !inBattle }} />
       {selectionOpen ? (
         <View style={[styles.pad, { flex: 1, paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
-          <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" style={{ alignSelf: 'flex-start' }}>
-            <Text style={styles.pickerBack}>‹ BACK</Text>
-          </Pressable>
+          {/* Bright sunset background: violet -> pink -> orange -> yellow, with cool sparkles */}
+          <GalileeScene />
+          <View style={styles.pickerTop}>
+            <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" style={styles.pickerBackBtn}>
+              <Text style={styles.pickerBack}>‹ BACK</Text>
+            </Pressable>
+            <Pressable
+              onPress={toggleMusic}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={musicOn ? 'Turn music off' : 'Turn music on'}
+              style={styles.pickerBackBtn}
+            >
+              <Text style={styles.pickerBack}>{musicOn ? '♪ ON' : '♪ OFF'}</Text>
+            </Pressable>
+          </View>
           <Text style={styles.title}>VERSE BATTLE</Text>
           <Text style={styles.subTitle}>
             {petName} vs {ANIMAL_TYPES[enemyKey].name}
@@ -382,7 +440,7 @@ export default function VerseBattle() {
               </View>
               ) : null}
 
-              <Text style={styles.help}>Tap the words in order, from memory. Tap a word again to take it back.</Text>
+              <Text style={styles.help}>Fill the blanks from memory, in any order: tap a blank, then a word. Tap a word again to take it back.</Text>
 
               <View style={styles.wordRow}>
                 {currentWords.map((word, index) => (
@@ -391,11 +449,11 @@ export default function VerseBattle() {
                     style={({ pressed }) => [
                       styles.wordButton,
                       { backgroundColor: TILE_COLORS[index % TILE_COLORS.length] },
-                      usedTiles.includes(index) && styles.wordButtonUsed,
+                      slotTiles.includes(index) && styles.wordButtonUsed,
                       pressed && { transform: [{ translateY: 2 }] },
                     ]}
                     onPress={() => handleWordTap(word, index)}
-                    accessibilityLabel={usedTiles.includes(index) ? `${word}, placed. Tap to take it back` : word}
+                    accessibilityLabel={slotTiles.includes(index) ? `${word}, placed. Tap to take it back` : word}
                   >
                     <Text style={styles.wordText}>{word}</Text>
                   </Pressable>
@@ -410,12 +468,12 @@ export default function VerseBattle() {
                   .map((word, index) => (
                     <Pressable
                       key={`${word}-${index}`}
-                      disabled={orderedWords[index] === undefined}
-                      onPress={() => takeBackFrom(index)}
-                      accessibilityLabel={orderedWords[index] ? `${orderedWords[index]}. Tap to take it back` : 'Empty'}
+                      onPress={() => (orderedWords[index] !== undefined ? clearSlot(index) : setActiveSlot(index))}
+                      accessibilityLabel={orderedWords[index] ? `${orderedWords[index]}. Tap to take it back` : `Blank ${index + 1}. Tap to fill this one next`}
                       style={[
                         styles.answerSlot,
                         orderedWords[index] !== undefined && styles.answerSlotFilled, // same color right or wrong: no hints
+                        orderedWords[index] === undefined && index === activeSlot && styles.answerSlotActive,
                       ]}
                     >
                       <Text style={styles.answerText}>{orderedWords[index] ?? '_'}</Text>
@@ -446,17 +504,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   title: {
+    fontFamily: 'Silkscreen_700Bold',
     fontSize: 28,
-    fontWeight: '900',
-    color: '#f5d98b',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginTop: 4,
+    textShadowColor: '#3A1470',
+    textShadowOffset: { width: 3, height: 3 },
+    textShadowRadius: 0,
   },
   subTitle: {
-    fontSize: 18,
-    color: 'white',
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 15,
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 12,
+    textShadowColor: 'rgba(58,20,112,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0,
   },
   statusBar: {
     flexDirection: 'row',
@@ -499,10 +564,21 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: 'Montserrat_500Medium',
   },
+  pickerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  pickerBackBtn: {
+    backgroundColor: 'rgba(43,16,90,0.55)',
+    borderWidth: 2,
+    borderColor: '#1B1612',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
   pickerBack: {
     fontFamily: 'Silkscreen_700Bold',
-    fontSize: 15,
-    color: '#E8D9B5',
+    fontSize: 13,
+    color: '#FFFFFF',
   },
   timer: {
     fontFamily: 'Silkscreen_700Bold',
@@ -690,6 +766,10 @@ const styles = StyleSheet.create({
     borderColor: '#1B1612',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  answerSlotActive: {
+    borderColor: '#FFD23D',
+    backgroundColor: '#5E5868',
   },
   answerSlotFilled: {
     backgroundColor: '#F2E6C8',
