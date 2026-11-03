@@ -8,6 +8,7 @@ import {
   chooseCpuMove,
   computeAnimalDamage,
   getAnimalMoves,
+  getVerseMatchPercent,
   scrambleWords,
   type AnimalKey,
   type AnimalMove,
@@ -259,18 +260,28 @@ export default function VerseBattle() {
     const after = slots.findIndex((t, i) => t == null && i > pos);
     setActiveSlot(after !== -1 ? after : Math.max(0, slots.indexOf(null)));
 
-    const next = slots.map((t) => (t == null ? '' : currentWords[t]));
+       const next = slots.map((t) => (t == null ? '' : currentWords[t]));
 
-    if (slots.every((t) => t != null) && next.join(' ') === targetWords.join(' ')) {
+    if (slots.every((t) => t != null)) {
       if (timerRef.current) clearInterval(timerRef.current);
 
-      const playerDamage = computeAnimalDamage(
+      const matchPercent = getVerseMatchPercent(targetWords, next);
+      const basePlayerDamage = computeAnimalDamage(
         petKey,
         enemyKey,
-        Math.max(35, (verseText.split(/\s+/).length * 5) + selectedMove.power),
+        selectedMove.power,
         playerLevel,
         milestone,
       );
+
+      const effectiveAccuracy = selectedMove.accuracy * matchPercent;
+      const playerHit = Math.random() * 100 < effectiveAccuracy;
+      const playerDamage = {
+        ...basePlayerDamage,
+        damage: playerHit
+          ? Math.round(basePlayerDamage.damage * matchPercent)
+          : 0,
+      };
 
       const cpuMove = chooseCpuMove(enemyKey);
       const cpuDamage = computeAnimalDamage(enemyKey, petKey, cpuMove.power, milestone, playerLevel);
@@ -284,7 +295,11 @@ export default function VerseBattle() {
         ),
       );
 
-      setLog(`${petName} used ${selectedMove.name} and dealt ${playerDamage.damage} damage.`);
+      setLog(
+        playerHit
+          ? `${petName} recalled ${Math.round(matchPercent * 100)}% of the verse. ${selectedMove.name} dealt ${playerDamage.damage} damage.`
+          : `${petName} recalled ${Math.round(matchPercent * 100)}% of the verse, but ${selectedMove.name} missed.`,
+      );
 
       setTimeout(() => {
         if (Math.random() < 0.5) {
