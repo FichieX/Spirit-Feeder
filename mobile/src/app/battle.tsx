@@ -8,7 +8,7 @@ import { PET_BY_ANIMAL, PET_SCALE, animsFor, dressed, type Anim } from '../pets/
 import { pickQuestions, choicesFor, loadSeen, markSeen, type Question } from '../battle/questions';
 import { POWERS, isRarePower, loadPowers, savePowers, type PowerBag, type PowerKey } from '../battle/powerups';
 import { rollReward, type Reward } from '../battle/rewards';
-import { decorItem, loadDecor, outfitOn, saveDecor, type DecorState } from '../decor/items';
+import { decorItem, loadDecor, outfitOn, saveDecor, wornClothes, type DecorState } from '../decor/items';
 import { VICTORY_VERSES, COMFORT_VERSES, pickVerse, type Verse } from '../battle/verses';
 import { reportSerpent, type SerpentXp } from '../api/serpent';
 
@@ -401,6 +401,7 @@ export default function Battle() {
             <Sprite
               key={`${petKey}-${petMove}`}
               sheet={dressed(petAnim.sheet, outfit, necklaceOn)}
+              clothes={wornClothes(decor)}
               ms={petAnim.ms}
               frameW={petFrameW}
               frameH={petFrameH}
@@ -534,10 +535,12 @@ export default function Battle() {
               ? (() => {
                   const item = decorItem(reward.item);
                   return (
-                    <View style={[styles.rewardRow, styles.rewardRare]}>
+                    <View style={[styles.rewardRow, styles.rewardRare, item.rare && styles.rewardRareDecor]}>
                       <Image source={item.icon} style={styles.rewardIcon} resizeMode="contain" />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.rareTag}>NEW DECORATION!</Text>
+                        <Text style={[styles.rareTag, item.rare && styles.rareDecorTag]}>
+                          {item.rare ? 'RARE PULL!' : 'NEW DECORATION!'}
+                        </Text>
                         <Text style={styles.rewardName}>{item.name}</Text>
                         <Text style={styles.rewardInfo}>
                           {item.group === 'clothes' ? 'Open DECOR in the study to put it on.' : 'Open DECOR in the study to hang it up.'}
@@ -672,6 +675,9 @@ const styles = StyleSheet.create({
   rewardIcon: { width: 48, height: 48 },
   rewardRare: { borderWidth: 3, borderColor: GOLD, backgroundColor: '#2A1E10' },
   rareTag: { fontFamily: 'Silkscreen_700Bold', fontSize: 12, color: '#F2D27A', letterSpacing: 1, marginBottom: 2 },
+  // Rare decorations (stained glass) glow purple, like the RARE tags
+  rewardRareDecor: { borderColor: '#C9A0E8', backgroundColor: '#251A2B' },
+  rareDecorTag: { color: '#C9A0E8' },
   rewardName: { fontFamily: 'Silkscreen_700Bold', fontSize: 15, color: GOLD },
   rewardInfo: { fontFamily: 'Montserrat_500Medium', fontSize: 13, color: PARCHMENT, marginTop: 2 },
   xpWin: { fontFamily: 'Silkscreen_700Bold', fontSize: 18, color: GOLD, textAlign: 'center', marginBottom: 12 },

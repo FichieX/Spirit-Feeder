@@ -470,6 +470,14 @@ const OUTFIT_PAIRS: [number, number][] = [
   [require('../../assets/images/camel_adult_die.png'), require('../../assets/images/camel_adult_die_plain.png')],
 ];
 const OUTFIT_OFF = new Map<number, number>(OUTFIT_PAIRS);
+const NECKLACE_OFF = new Map<number, number>(NECKLACE_PAIRS.map(([plain, cross]) => [cross, plain]));
+
+// The plain art under any sheet: necklace off, grown-up outfit off.
+// (The clothes are drawn to fit these, so they fit the dressed sheets too.)
+export function plainSheet(sheet: number) {
+  const s = NECKLACE_OFF.get(sheet) ?? sheet;
+  return OUTFIT_OFF.get(s) ?? s;
+}
 
 // The sheet to show: grown-up outfit on or off, then the necklace on or off
 export function dressed(sheet: number, outfitOn: boolean, necklaceOn: boolean) {

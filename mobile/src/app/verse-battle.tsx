@@ -22,7 +22,7 @@ import MoveTablets, { moveColor } from '../components/verse/MoveTablets';
 
 // Bright word tiles: each tile gets one of these (by position, so colors say nothing about the answer)
 const TILE_COLORS = ['#FF4F79', '#3DA5FF', '#4FE08A', '#FFD23D', '#FF8A3D', '#B26BFF'];
-import { loadDecor, outfitOn, type DecorState } from '../decor/items';
+import { loadDecor, outfitOn, wornClothes, type DecorState } from '../decor/items';
 
 type BattleMove = AnimalMove & {
   pp: number;
@@ -406,6 +406,7 @@ export default function VerseBattle() {
               maxHp: getAnimalMaxHealth(playerLevel, petKey),
               outfit: outfitOn(decor, petKey),
               necklace: decor.used.includes('necklace'),
+              clothes: wornClothes(decor),
             }}
             enemy={{
               key: enemyKey,

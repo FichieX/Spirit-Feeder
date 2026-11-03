@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Image } from 'expo-image';
+import { clothesLayers } from '../../decor/clothes';
+import type { ClothesLayer } from '../../decor/clothesLayers';
+import type { DecorKey } from '../../decor/items';
 
 const COLS = 4;
 
@@ -12,11 +15,12 @@ type Props = {
   scale: number; // screen points per pixel-art pixel
   loop?: boolean;
   onDone?: () => void; // called once when a non-looping animation ends
+  clothes?: DecorKey[]; // Bible clothes the pet has on (drawn frame by frame with it)
 };
 
 // Plays a sprite sheet: loops forever, or plays once and calls onDone.
 // Uses expo-image with no fade-in so switching animations never blinks.
-export default function Sprite({ sheet, ms: msIn, frameW, frameH, scale, loop = true, onDone }: Props) {
+export default function Sprite({ sheet, ms: msIn, frameW, frameH, scale, loop = true, onDone, clothes }: Props) {
   // Fall back to a single still frame if timings are missing, instead of crashing
   const ms = msIn && msIn.length ? msIn : [1000];
   const [frame, setFrame] = useState(0);
@@ -50,8 +54,34 @@ export default function Sprite({ sheet, ms: msIn, frameW, frameH, scale, loop = 
   const w = frameW * scale;
   const h = frameH * scale;
   const rows = Math.ceil(ms.length / COLS);
+  const wornKey = clothes?.join(',') ?? '';
+  const layers = useMemo(() => clothesLayers(sheet, clothes), [sheet, wornKey]);
+  // One piece of clothing: its own small sheet, showing the same frame as the pet
+  const layer = (l: ClothesLayer, i: number) => (
+    <View
+      key={i}
+      pointerEvents="none"
+      style={{ position: 'absolute', left: l.x * scale, top: l.y * scale, width: l.w * scale, height: l.h * scale, overflow: 'hidden' }}
+    >
+      <Image
+        source={l.src}
+        transition={0}
+        cachePolicy="memory"
+        contentFit="fill"
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: l.w * scale * COLS,
+          height: l.h * scale * rows,
+          transform: [{ translateX: -(frame % COLS) * l.w * scale }, { translateY: -Math.floor(frame / COLS) * l.h * scale }],
+        }}
+      />
+    </View>
+  );
   return (
     <View style={{ width: w, height: h, overflow: 'hidden' }}>
+      {layers.back.map(layer)}
       <Image
         source={sheet}
         transition={0}
@@ -66,6 +96,7 @@ export default function Sprite({ sheet, ms: msIn, frameW, frameH, scale, loop = 
           transform: [{ translateX: -(frame % COLS) * w }, { translateY: -Math.floor(frame / COLS) * h }],
         }}
       />
+      {layers.front.map((l, i) => layer(l, 10 + i))}
     </View>
   );
 }

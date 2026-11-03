@@ -6,7 +6,7 @@ import Sprite, { PreloadSheets } from '../components/pets/Sprite';
 import { PET_BY_ANIMAL, PET_SCALE, animsFor, dressed, type Anim } from '../pets/forms';
 import { POWERS, loadPowers, savePowers, type PowerBag, type PowerKey } from '../battle/powerups';
 import { VICTORY_VERSES, COMFORT_VERSES, pickVerse, type Verse } from '../battle/verses';
-import { loadDecor, outfitOn } from '../decor/items';
+import { loadDecor, outfitOn, wornClothes, type DecorKey } from '../decor/items';
 import { battleSocketUrl } from '../api/ranked';
 import { answerBattleInvite, inviteToBattle, MODE_INFO, type BattleInvite, type BattleMode } from '../api/friends';
 
@@ -104,6 +104,7 @@ export default function Pvp() {
   const [bag, setBag] = useState<PowerBag>({ freeze: 0, shield: 0, fifty: 0 });
   const [necklaceOn, setNecklaceOn] = useState(false);
   const [outfit, setOutfit] = useState(true); // grown-up outfit
+  const [clothes, setClothes] = useState<DecorKey[]>([]); // Bible clothes
   const [searchSecs, setSearchSecs] = useState(0);
   const [petMove, setPetMove] = useState<PetMove>('idle');
   const [oppMove, setOppMove] = useState<PetMove>('idle');
@@ -175,6 +176,7 @@ export default function Pvp() {
     loadDecor(params.username).then((d) => {
       setNecklaceOn(d.used.includes('necklace'));
       setOutfit(outfitOn(d, PET_BY_ANIMAL[Number(params.animalId) || 1] ?? 'donkey'));
+      setClothes(wornClothes(d));
     });
   }, [params.username]);
 
@@ -571,6 +573,7 @@ export default function Pvp() {
             <Sprite
               key={`me-${myKey}-${petMove}`}
               sheet={dressed(mine.anim.sheet, outfit, necklaceOn)}
+              clothes={clothes}
               ms={mine.anim.ms}
               frameW={mine.w}
               frameH={mine.h}

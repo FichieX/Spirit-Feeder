@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DECOR, GROWN_UP_ITEM, type DecorItem, type DecorKey, type DecorState } from '../../decor/items';
+import { DECOR, GROWN_UP_ITEM, ownsItem, type DecorItem, type DecorKey, type DecorState } from '../../decor/items';
 
 const INK = '#1B1612';
 const GOLD = '#D9A441';
 const PARCHMENT = '#E8D9B5';
 const DIM = '#8C7765';
+const RARE = '#C9A0E8';
 
 type Props = {
   visible: boolean;
@@ -16,14 +17,15 @@ type Props = {
   note?: string; // extra line under the clothes
   petKey: string; // which pet: only its own grown-up outfit is listed
   grownUp: boolean; // grown-up outfits only fit adults
+  tester?: boolean; // test accounts can try every Bible piece before the coin shop opens
 };
 
 // Decorate menu: drop-down lists for Clothes and Room (with Windows and Frames inside Room).
 // A plain layer on top of the study (not an iOS Modal), like the test tools.
-export default function DecorMenu({ visible, state, onToggle, onClose, note, petKey, grownUp }: Props) {
+export default function DecorMenu({ visible, state, onToggle, onClose, note, petKey, grownUp, tester = false }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const [open, setOpen] = useState<Record<string, boolean>>({ clothes: false, room: false, windows: false, frames: false });
+  const [open, setOpen] = useState<Record<string, boolean>>({ clothes: false, bible: true, room: false, windows: false, frames: false });
   if (!visible) return null;
 
   // Opening one list closes the one next to it, so the menu stays short
@@ -35,26 +37,34 @@ export default function DecorMenu({ visible, state, onToggle, onClose, note, pet
       return next;
     });
   const clothes = DECOR.filter((d) => d.group === 'clothes' && (!d.pet || d.pet === petKey));
+  const outfits = clothes.filter((d) => !d.shop);
+  const bible = clothes.filter((d) => d.shop);
   const growUpItem = GROWN_UP_ITEM[petKey];
   const allRoom = DECOR.filter((d) => d.group === 'room');
   const room = allRoom.filter((d) => !d.sub);
   const windows = DECOR.filter((d) => d.sub === 'windows');
   const frames = DECOR.filter((d) => d.sub === 'frames');
-  const ownedCount = (items: DecorItem[]) => items.filter((d) => state.owned.includes(d.key)).length;
+  const ownedCount = (items: DecorItem[]) => items.filter((d) => ownsItem(state, d.key, tester)).length;
 
   const Row = ({ item, indent = 0 }: { item: DecorItem; indent?: number }) => {
-    const owned = state.owned.includes(item.key);
+    const owned = ownsItem(state, item.key, tester);
     const used = state.used.includes(item.key);
     const on = item.group === 'clothes' ? 'WEAR' : 'HANG';
     const off = item.group === 'clothes' ? 'TAKE OFF' : 'TAKE DOWN';
     const isGrowUp = item.key === growUpItem;
     const tooYoung = !!item.pet && !grownUp; // outfits only fit grown-ups (the necklace fits everyone)
-    const hint = !owned
+    const hint = item.shop
+      ? owned
+        ? item.verse
+        : 'Coin shop coming soon'
+      : !owned
       ? isGrowUp
         ? item.pet
           ? `Comes when your ${petKey} grows up`
           : `Comes when your ${petKey} grows up, or win it in a serpent battle`
-        : 'Win it in a serpent battle'
+        : item.rare
+          ? 'Rare pull from serpent battles'
+          : 'Win it in a serpent battle'
       : tooYoung
         ? `Fits when your ${petKey} is grown up`
         : isGrowUp
@@ -64,7 +74,10 @@ export default function DecorMenu({ visible, state, onToggle, onClose, note, pet
       <View style={[styles.row, { paddingLeft: 10 + indent }]}>
         <Image source={item.icon} style={[styles.icon, !owned && styles.locked]} resizeMode="contain" />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.name, !owned && { color: DIM }]}>{item.name}</Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, !owned && { color: DIM }]}>{item.name}</Text>
+            {item.rare ? <Text style={styles.rareBadge}>RARE</Text> : null}
+          </View>
           {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         </View>
         {owned && tooYoung ? (
@@ -113,17 +126,21 @@ export default function DecorMenu({ visible, state, onToggle, onClose, note, pet
           <Header id="clothes" title="CLOTHES" count={ownedCount(clothes)} total={clothes.length} />
           {open.clothes ? (
             <>
-              {clothes.map((d) => (
+              {outfits.map((d) => (
                 <Row key={d.key} item={d} />
               ))}
               {note ? <Text style={styles.note}>{note}</Text> : null}
-              <View style={[styles.row, { paddingLeft: 10 }]}>
-                <Image source={require('../../../assets/images/item_clothes.png')} style={[styles.icon, styles.locked]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.name, { color: DIM }]}>Clothes</Text>
-                  <Text style={styles.hint}>Coming soon</Text>
-                </View>
-              </View>
+              <Header id="bible" title="BIBLE CLOTHES" count={ownedCount(bible)} total={bible.length} indent={14} />
+              {open.bible ? (
+                <>
+                  {bible.map((d) => (
+                    <Row key={d.key} item={d} indent={18} />
+                  ))}
+                  <Text style={[styles.note, { paddingLeft: 28 }]}>
+                    1 hat, 1 neck piece and 1 body piece at a time. A body piece swaps with the grown-up outfit.
+                  </Text>
+                </>
+              ) : null}
             </>
           ) : null}
 
@@ -201,7 +218,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingRight: 4, borderBottomWidth: 1, borderBottomColor: '#3D2B22' },
   icon: { width: 40, height: 40 },
   locked: { opacity: 0.3 },
-  name: { fontFamily: 'Montserrat_700Bold', fontSize: 14, color: PARCHMENT },
+  name: { fontFamily: 'Montserrat_700Bold', fontSize: 14, color: PARCHMENT, flexShrink: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // Same purple RARE tag as the power-ups list
+  rareBadge: { fontFamily: 'Silkscreen_700Bold', fontSize: 9, color: INK, backgroundColor: RARE, paddingHorizontal: 4, paddingVertical: 1 },
   hint: { fontFamily: 'Montserrat_400Regular', fontSize: 12, color: DIM, marginTop: 2 },
   note: { fontFamily: 'Montserrat_400Regular', fontSize: 12, color: DIM, paddingLeft: 10, paddingTop: 4 },
   lockText: { fontFamily: 'Silkscreen_700Bold', fontSize: 11, color: DIM },

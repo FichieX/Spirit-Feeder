@@ -41,7 +41,8 @@ import {
 import DecorMenu from '../components/study/DecorMenu';
 import BibleReader from '../components/study/BibleReader';
 import MemorizeScreen from '../components/study/MemorizeScreen';
-import { DECOR, giveGrownUpItem, loadDecor, outfitOn, saveDecor, toggleUsed, type DecorKey, type DecorState } from '../decor/items';
+import { DECOR, giveGrownUpItem, loadDecor, outfitOn, saveDecor, toggleUsed, wornClothes, type DecorKey, type DecorState } from '../decor/items';
+import { clothesSheets } from '../decor/clothes';
 import { loadPowers, savePowers } from '../battle/powerups';
 import { setSession } from '../session';
 import { saveTestXp } from '../api/testing';
@@ -168,6 +169,7 @@ export default function Study() {
   const necklaceOn = decor.used.includes('necklace');
   // Grown-up outfit (donkey saddle, lion cross, raven pouch, camel robe). Shown until the save loads, so it doesn't flicker.
   const outfit = decorLoaded ? outfitOn(decor, petKey) : true;
+  const worn = wornClothes(decor); // Bible clothes on (hat, scarf, coat, cape)
   useEffect(() => {
     loadDecor(username).then((d) => {
       setDecor(d);
@@ -576,19 +578,21 @@ export default function Study() {
       title: 'Battle',
       actions: [
         { label: 'Serpent battle', onPress: () => startBattle(milestone) },
-        { label: 'Verse battle', onPress: () => {
-  router.push({
-    pathname: '/verse-battle',
-    params: {
-      username: username ?? '',
-      userId: userId ?? '',
-      animalId: String(animalId),
-      level: String(level),
-      milestone: String(Math.max(5, Math.floor(level / 5) * 5)),
-      petName: petName || 'Your pet',
-    },
-  });
-}},
+        {
+          label: 'Verse battle',
+          onPress: () =>
+            router.push({
+              pathname: '/verse-battle',
+              params: {
+                username: username ?? '',
+                userId: userId ?? '',
+                animalId: String(animalId),
+                level: String(level),
+                milestone: String(Math.max(5, Math.floor(level / 5) * 5)),
+                petName: petName || 'Your pet',
+              },
+            }),
+        },
         { label: 'Serpent ambush', onPress: () => { setTestOpen(false); serpentAttacks(milestone); } },
         { label: 'Forget beaten serpents', onPress: () => setSerpentBeaten([]) },
         { label: 'Get all decorations', onPress: () => updateDecor({ ...decor, owned: DECOR.map((d) => d.key) }) },
@@ -704,7 +708,15 @@ export default function Study() {
 
   return (
     <Animated.View style={[styles.screen, { transform: [{ translateX: ambushShake }] }]}>
-      <PreloadSheets sheets={ALL_SHEETS.map((sh) => dressed(sh, outfit, necklaceOn))} />
+      <PreloadSheets
+        sheets={[
+          ...ALL_SHEETS.map((sh) => dressed(sh, outfit, necklaceOn)),
+          ...clothesSheets(
+            [baby.idle, baby.tap, baby.hungry, baby.dance, baby.read, baby.bread, baby.water, baby.wine].flatMap((a) => (a ? [a.sheet] : [])),
+            worn,
+          ),
+        ]}
+      />
 
       {/* Brick wall, tiled */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -829,6 +841,7 @@ export default function Study() {
           <Sprite
             key={animKey}
             sheet={dressed(anim.sheet, outfit, necklaceOn)}
+            clothes={worn}
             ms={anim.ms}
             frameW={frameW}
             frameH={frameH}
@@ -1060,6 +1073,7 @@ export default function Study() {
         onClose={() => setDecorOpen(false)}
         petKey={petKey}
         grownUp={adult}
+        tester={tester}
       />
 
       <TestPanel visible={testOpen} groups={testGroups} info={testInfo} onClose={() => setTestOpen(false)} />

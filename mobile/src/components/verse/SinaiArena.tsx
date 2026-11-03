@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Sprite from '../pets/Sprite';
+import type { DecorKey } from '../../decor/items';
 import { PET_SCALE, animsFor, dressed } from '../../pets/forms';
 
 // ---------- Art ----------
@@ -27,7 +28,7 @@ type Fighter = {
 };
 
 type Props = {
-  pet: Fighter & { outfit: boolean; necklace: boolean };
+  pet: Fighter & { outfit: boolean; necklace: boolean; clothes?: DecorKey[] };
   enemy: Fighter;
 };
 
@@ -113,6 +114,7 @@ export default function SinaiArena({ pet, enemy }: Props) {
       >
         <Sprite
           sheet={dressed(petAnims.idle.sheet, pet.outfit, pet.necklace)}
+          clothes={pet.clothes}
           ms={petAnims.idle.ms}
           frameW={petAnims.frameW}
           frameH={petAnims.frameH}
