@@ -3,12 +3,30 @@ import json
 import random
 from datetime import datetime, timedelta
 from typing import Optional
+import hmac
+from passlib.context import CryptContext
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(password: str, stored_password: str) -> bool:
+    if stored_password.startswith(("$2a$", "$2b$", "$2y$")):
+        try:
+            return pwd_context.verify(password, stored_password)
+        except (TypeError, ValueError):
+            return False
+    return hmac.compare_digest(stored_password, password)
+
 
 # ------------------------------------------------------------------------------
 # DATABASE SETUP
@@ -187,10 +205,14 @@ app = FastAPI(title="Spirit-Feeder API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv("CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 class RegisterRequest(BaseModel):
@@ -237,7 +259,7 @@ def register(data: RegisterRequest):
         user = User(
             username=data.username,
             email=data.email,
-            password=data.password,
+            password=hash_password(data.password),
             birthday=data.birthday,
             current_section_id=1
         )
@@ -258,8 +280,12 @@ def login(data: LoginRequest):
             (User.username == data.identifier) | (User.email == data.identifier)
         ).first()
         
-        if not user or user.password != data.password:
+        if not user or not verify_password(data.password, user.password):
             raise HTTPException(status_code=401, detail="Invalid username/email or password.")
+
+        if not user.password.startswith(("$2a$", "$2b$", "$2y$")):
+            user.password = hash_password(data.password)
+            db.commit()
 
         return {
             "message": "Login successful!",
